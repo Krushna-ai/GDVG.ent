@@ -327,6 +327,114 @@ async def create_content(content_data: ContentCreate):
     
     return content
 
+# Admin Content Management Routes
+@api_router.post("/admin/content", response_model=Content)
+async def admin_create_content(
+    content_data: ContentCreate, 
+    current_admin: AdminUser = Depends(get_current_admin)
+):
+    """Admin: Create new content"""
+    content = Content(**content_data.dict())
+    
+    # Insert into database
+    await db.content.insert_one(content.dict())
+    
+    return content
+
+@api_router.put("/admin/content/{content_id}", response_model=Content)
+async def admin_update_content(
+    content_id: str,
+    content_data: ContentUpdate,
+    current_admin: AdminUser = Depends(get_current_admin)
+):
+    """Admin: Update existing content"""
+    
+    # Find existing content
+    existing_content = await db.content.find_one({"id": content_id})
+    if not existing_content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Update only provided fields
+    update_data = {k: v for k, v in content_data.dict().items() if v is not None}
+    update_data["updated_at"] = datetime.utcnow()
+    
+    # Update in database
+    await db.content.update_one({"id": content_id}, {"$set": update_data})
+    
+    # Return updated content
+    updated_content = await db.content.find_one({"id": content_id})
+    if '_id' in updated_content:
+        del updated_content['_id']
+    
+    return Content(**updated_content)
+
+@api_router.delete("/admin/content/{content_id}")
+async def admin_delete_content(
+    content_id: str,
+    current_admin: AdminUser = Depends(get_current_admin)
+):
+    """Admin: Delete content"""
+    
+    # Check if content exists
+    existing_content = await db.content.find_one({"id": content_id})
+    if not existing_content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Delete content
+    await db.content.delete_one({"id": content_id})
+    
+    return {"message": "Content deleted successfully"}
+
+@api_router.get("/admin/content", response_model=ContentResponse)
+async def admin_get_content(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    country: Optional[str] = None,
+    content_type: Optional[ContentType] = None,
+    current_admin: AdminUser = Depends(get_current_admin)
+):
+    """Admin: Get content with admin privileges"""
+    skip = (page - 1) * limit
+    
+    # Build filter query
+    filter_query = {}
+    
+    if search:
+        filter_query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"original_title": {"$regex": search, "$options": "i"}},
+            {"synopsis": {"$regex": search, "$options": "i"}},
+            {"tags": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if country:
+        filter_query["country"] = {"$regex": country, "$options": "i"}
+    
+    if content_type:
+        filter_query["content_type"] = content_type
+    
+    # Get total count
+    total = await db.content.count_documents(filter_query)
+    
+    # Get paginated results
+    cursor = db.content.find(filter_query).skip(skip).limit(limit).sort("created_at", -1)
+    contents = await cursor.to_list(length=limit)
+    
+    # Convert ObjectId to string and create Content objects
+    content_list = []
+    for content in contents:
+        if '_id' in content:
+            del content['_id']
+        content_list.append(Content(**content))
+    
+    return ContentResponse(
+        contents=content_list,
+        total=total,
+        page=page,
+        limit=limit
+    )
+
 @api_router.get("/trending", response_model=List[Content])
 async def get_trending_content(limit: int = Query(10, ge=1, le=50)):
     """Get trending content (highest rated recent content)"""
