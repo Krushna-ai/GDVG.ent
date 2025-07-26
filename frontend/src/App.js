@@ -520,8 +520,8 @@ const ContentDetailModal = ({ content, darkTheme, onClose }) => {
                     key={genre}
                     className={`px-3 py-1 rounded-full text-sm ${
                       darkTheme
-                        ? 'bg-gray-800 text-gray-300'
-                        : 'bg-gray-100 text-gray-700'
+                        ? 'bg-red-900/30 text-red-300 border border-red-800/50'
+                        : 'bg-red-100 text-red-700 border border-red-200'
                     }`}
                   >
                     {genre.charAt(0).toUpperCase() + genre.slice(1).replace('_', ' ')}
