@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Query
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,10 +6,10 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime
-
+from enum import Enum
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -25,32 +25,198 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Enums for content types and genres
+class ContentType(str, Enum):
+    DRAMA = "drama"
+    MOVIE = "movie"
+    SERIES = "series"
+    ANIME = "anime"
 
-# Define Models
-class StatusCheck(BaseModel):
+class ContentGenre(str, Enum):
+    ROMANCE = "romance"
+    COMEDY = "comedy"
+    ACTION = "action"
+    THRILLER = "thriller"
+    HORROR = "horror"
+    FANTASY = "fantasy"
+    DRAMA = "drama"
+    MYSTERY = "mystery"
+    SLICE_OF_LIFE = "slice_of_life"
+    HISTORICAL = "historical"
+    CRIME = "crime"
+    ADVENTURE = "adventure"
+
+# Content Models
+class CastMember(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    name: str
+    character: str
+    profile_image: Optional[str] = None
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class CrewMember(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    role: str  # director, writer, producer, etc.
+    profile_image: Optional[str] = None
 
-# Add your routes to the router instead of directly to app
+class Content(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    original_title: Optional[str] = None
+    poster_url: str
+    banner_url: Optional[str] = None
+    synopsis: str
+    year: int
+    country: str
+    content_type: ContentType
+    genres: List[ContentGenre]
+    rating: float = Field(ge=0, le=10)
+    episodes: Optional[int] = None
+    duration: Optional[int] = None  # in minutes
+    cast: List[CastMember] = []
+    crew: List[CrewMember] = []
+    streaming_platforms: List[str] = []
+    tags: List[str] = []
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ContentCreate(BaseModel):
+    title: str
+    original_title: Optional[str] = None
+    poster_url: str
+    banner_url: Optional[str] = None
+    synopsis: str
+    year: int
+    country: str
+    content_type: ContentType
+    genres: List[ContentGenre]
+    rating: float = Field(ge=0, le=10)
+    episodes: Optional[int] = None
+    duration: Optional[int] = None
+    cast: List[CastMember] = []
+    crew: List[CrewMember] = []
+    streaming_platforms: List[str] = []
+    tags: List[str] = []
+
+class ContentResponse(BaseModel):
+    contents: List[Content]
+    total: int
+    page: int
+    limit: int
+
+# API Routes
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Global Drama Verse Guide API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
+@api_router.get("/content", response_model=ContentResponse)
+async def get_content(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    country: Optional[str] = None,
+    content_type: Optional[ContentType] = None,
+    genre: Optional[ContentGenre] = None,
+    year: Optional[int] = None
+):
+    """Get paginated content with optional filters"""
+    skip = (page - 1) * limit
+    
+    # Build filter query
+    filter_query = {}
+    
+    if search:
+        filter_query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"original_title": {"$regex": search, "$options": "i"}},
+            {"synopsis": {"$regex": search, "$options": "i"}},
+            {"tags": {"$regex": search, "$options": "i"}}
+        ]
+    
+    if country:
+        filter_query["country"] = {"$regex": country, "$options": "i"}
+    
+    if content_type:
+        filter_query["content_type"] = content_type
+    
+    if genre:
+        filter_query["genres"] = genre
+    
+    if year:
+        filter_query["year"] = year
+    
+    # Get total count
+    total = await db.content.count_documents(filter_query)
+    
+    # Get paginated results
+    cursor = db.content.find(filter_query).skip(skip).limit(limit).sort("created_at", -1)
+    contents = await cursor.to_list(length=limit)
+    
+    # Convert ObjectId to string and create Content objects
+    content_list = []
+    for content in contents:
+        if '_id' in content:
+            del content['_id']
+        content_list.append(Content(**content))
+    
+    return ContentResponse(
+        contents=content_list,
+        total=total,
+        page=page,
+        limit=limit
+    )
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
+@api_router.get("/content/{content_id}", response_model=Content)
+async def get_content_by_id(content_id: str):
+    """Get content by ID"""
+    content = await db.content.find_one({"id": content_id})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    if '_id' in content:
+        del content['_id']
+    
+    return Content(**content)
+
+@api_router.post("/content", response_model=Content)
+async def create_content(content_data: ContentCreate):
+    """Create new content"""
+    content = Content(**content_data.dict())
+    
+    # Insert into database
+    await db.content.insert_one(content.dict())
+    
+    return content
+
+@api_router.get("/trending", response_model=List[Content])
+async def get_trending_content(limit: int = Query(10, ge=1, le=50)):
+    """Get trending content (highest rated recent content)"""
+    cursor = db.content.find().sort([("rating", -1), ("created_at", -1)]).limit(limit)
+    contents = await cursor.to_list(length=limit)
+    
+    content_list = []
+    for content in contents:
+        if '_id' in content:
+            del content['_id']
+        content_list.append(Content(**content))
+    
+    return content_list
+
+@api_router.get("/countries")
+async def get_countries():
+    """Get list of available countries"""
+    countries = await db.content.distinct("country")
+    return {"countries": sorted(countries)}
+
+@api_router.get("/genres")
+async def get_genres():
+    """Get list of available genres"""
+    return {"genres": [genre.value for genre in ContentGenre]}
+
+@api_router.get("/content-types")
+async def get_content_types():
+    """Get list of available content types"""
+    return {"content_types": [content_type.value for content_type in ContentType]}
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -70,6 +236,171 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database with sample data"""
+    # Check if content collection is empty
+    count = await db.content.count_documents({})
+    if count == 0:
+        logger.info("Initializing database with sample content...")
+        await populate_sample_data()
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+async def populate_sample_data():
+    """Populate database with sample global content"""
+    sample_content = [
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Squid Game",
+            "original_title": "오징어 게임",
+            "poster_url": "https://images.unsplash.com/photo-1633882595230-0969f5af2780?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwxfHxpbnRlcm5hdGlvbmFsJTIwbW92aWVzfGVufDB8fHx8MTc1MzUyNzI2OHww&ixlib=rb-4.1.0&q=85",
+            "banner_url": "https://images.unsplash.com/photo-1710988486897-e933e4b0f72c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHwzfHxnbG9iYWwlMjBjaW5lbWF8ZW58MHx8fHwxNzUzNTI3MjU2fDA&ixlib=rb-4.1.0&q=85",
+            "synopsis": "A desperate group of people compete in children's games for a massive cash prize, but the stakes are deadly.",
+            "year": 2021,
+            "country": "South Korea",
+            "content_type": "series",
+            "genres": ["thriller", "drama", "mystery"],
+            "rating": 8.7,
+            "episodes": 9,
+            "cast": [
+                {"id": str(uuid.uuid4()), "name": "Lee Jung-jae", "character": "Seong Gi-hun", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "Park Hae-soo", "character": "Cho Sang-woo", "profile_image": None}
+            ],
+            "crew": [
+                {"id": str(uuid.uuid4()), "name": "Hwang Dong-hyuk", "role": "director", "profile_image": None}
+            ],
+            "streaming_platforms": ["Netflix"],
+            "tags": ["survival", "korean", "psychological"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Parasite",
+            "original_title": "기생충",
+            "poster_url": "https://images.unsplash.com/photo-1517486518908-97a5f91b325f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwzfHxpbnRlcm5hdGlvbmFsJTIwbW92aWVzfGVufDB8fHx8MTc1MzUyNzI2OHww&ixlib=rb-4.1.0&q=85",
+            "banner_url": "https://images.unsplash.com/photo-1627133805103-ce2d34ccdd37?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODB8MHwxfHNlYXJjaHw0fHxnbG9iYWwlMjBjaW5lbWF8ZW58MHx8fHwxNzUzNTI3MjU2fDA&ixlib=rb-4.1.0&q=85",
+            "synopsis": "A poor family schemes to become employed by a wealthy family and infiltrate their household by posing as unrelated, highly qualified individuals.",
+            "year": 2019,
+            "country": "South Korea",
+            "content_type": "movie",
+            "genres": ["thriller", "drama", "comedy"],
+            "rating": 8.5,
+            "duration": 132,
+            "cast": [
+                {"id": str(uuid.uuid4()), "name": "Song Kang-ho", "character": "Ki-taek", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "Lee Sun-kyun", "character": "Park Dong-ik", "profile_image": None}
+            ],
+            "crew": [
+                {"id": str(uuid.uuid4()), "name": "Bong Joon-ho", "role": "director", "profile_image": None}
+            ],
+            "streaming_platforms": ["Hulu", "Amazon Prime"],
+            "tags": ["oscar winner", "social commentary", "dark comedy"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Your Name",
+            "original_title": "君の名は。",
+            "poster_url": "https://images.unsplash.com/photo-1539481915544-f5cd50562d66?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHw0fHxpbnRlcm5hdGlvbmFsJTIwbW92aWVzfGVufDB8fHx8MTc1MzUyNzI2OHww&ixlib=rb-4.1.0&q=85",
+            "synopsis": "Two teenagers share a profound, magical connection upon discovering they are swapping bodies. Things manage to become even more complicated when the boy and girl decide to meet in person.",
+            "year": 2016,
+            "country": "Japan",
+            "content_type": "anime",
+            "genres": ["romance", "fantasy", "drama"],
+            "rating": 8.4,
+            "duration": 106,
+            "cast": [
+                {"id": str(uuid.uuid4()), "name": "Ryunosuke Kamiki", "character": "Taki Tachibana (voice)", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "Mone Kamishiraishi", "character": "Mitsuha Miyamizu (voice)", "profile_image": None}
+            ],
+            "crew": [
+                {"id": str(uuid.uuid4()), "name": "Makoto Shinkai", "role": "director", "profile_image": None}
+            ],
+            "streaming_platforms": ["Crunchyroll", "Funimation"],
+            "tags": ["anime", "body swap", "supernatural"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "3 Idiots",
+            "original_title": "3 Idiots",
+            "poster_url": "https://images.unsplash.com/photo-1633882595230-0969f5af2780?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwxfHxpbnRlcm5hdGlvbmFsJTIwbW92aWVzfGVufDB8fHx8MTc1MzUyNzI2OHww&ixlib=rb-4.1.0&q=85",
+            "synopsis": "Two friends are searching for their long lost companion. They revisit their college days and recall the memories of their friend who inspired them to think differently.",
+            "year": 2009,
+            "country": "India",
+            "content_type": "movie",
+            "genres": ["comedy", "drama"],
+            "rating": 8.4,
+            "duration": 170,
+            "cast": [
+                {"id": str(uuid.uuid4()), "name": "Aamir Khan", "character": "Rancho", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "R. Madhavan", "character": "Farhan", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "Sharman Joshi", "character": "Raju", "profile_image": None}
+            ],
+            "crew": [
+                {"id": str(uuid.uuid4()), "name": "Rajkumar Hirani", "role": "director", "profile_image": None}
+            ],
+            "streaming_platforms": ["Netflix", "Amazon Prime"],
+            "tags": ["bollywood", "friendship", "education"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "The Handmaiden",
+            "original_title": "아가씨",
+            "poster_url": "https://images.unsplash.com/photo-1517486518908-97a5f91b325f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwzfHxpbnRlcm5hdGlvbmFsJTIwbW92aWVzfGVufDB8fHx8MTc1MzUyNzI2OHww&ixlib=rb-4.1.0&q=85",
+            "synopsis": "A woman is hired as a handmaiden to a Japanese heiress, but secretly she is involved in a plot to defraud her.",
+            "year": 2016,
+            "country": "South Korea",
+            "content_type": "movie",
+            "genres": ["thriller", "drama", "mystery"],
+            "rating": 8.1,
+            "duration": 145,
+            "cast": [
+                {"id": str(uuid.uuid4()), "name": "Kim Min-hee", "character": "Lady Hideko", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "Kim Tae-ri", "character": "Sook-hee", "profile_image": None}
+            ],
+            "crew": [
+                {"id": str(uuid.uuid4()), "name": "Park Chan-wook", "role": "director", "profile_image": None}
+            ],
+            "streaming_platforms": ["Amazon Prime", "Mubi"],
+            "tags": ["psychological", "period drama", "lgbtq"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Money Heist",
+            "original_title": "La Casa de Papel",
+            "poster_url": "https://images.unsplash.com/photo-1539481915544-f5cd50562d66?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHw0fHxpbnRlcm5hdGlvbmFsJTIwbW92aWVzfGVufDB8fHx8MTc1MzUyNzI2OHww&ixlib=rb-4.1.0&q=85",
+            "synopsis": "A criminal mastermind who goes by 'The Professor' has a plan to pull off the biggest heist in recorded history -- to print billions of euros in the Royal Mint of Spain.",
+            "year": 2017,
+            "country": "Spain",
+            "content_type": "series",
+            "genres": ["crime", "thriller", "drama"],
+            "rating": 8.2,
+            "episodes": 41,
+            "cast": [
+                {"id": str(uuid.uuid4()), "name": "Álvaro Morte", "character": "The Professor", "profile_image": None},
+                {"id": str(uuid.uuid4()), "name": "Úrsula Corberó", "character": "Tokyo", "profile_image": None}
+            ],
+            "crew": [
+                {"id": str(uuid.uuid4()), "name": "Álex Pina", "role": "creator", "profile_image": None}
+            ],
+            "streaming_platforms": ["Netflix"],
+            "tags": ["heist", "spanish", "resistance"],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+    ]
+    
+    # Insert sample data
+    await db.content.insert_many(sample_content)
+    logger.info(f"Inserted {len(sample_content)} sample content items")
