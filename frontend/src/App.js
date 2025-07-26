@@ -54,7 +54,7 @@ const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
             onClick={() => setDarkTheme(!darkTheme)}
             className={`p-2 rounded-lg transition-all duration-200 ${
               darkTheme
-                ? 'text-yellow-400 hover:bg-gray-800'
+                ? 'text-yellow-400 hover:bg-gray-900'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
