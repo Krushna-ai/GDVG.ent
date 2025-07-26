@@ -140,7 +140,7 @@ const ContentCard = ({ content, darkTheme, onClick }) => {
     >
       <div className={`rounded-xl overflow-hidden transition-all duration-300 ${
         darkTheme 
-          ? 'bg-gray-800 group-hover:bg-gray-750' 
+          ? 'bg-gray-900 group-hover:bg-gray-800' 
           : 'bg-white group-hover:bg-gray-50'
       }`}>
         {/* Poster */}
