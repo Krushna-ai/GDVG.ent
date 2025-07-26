@@ -37,9 +37,9 @@ const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
                 placeholder="Search global dramas, movies, anime..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full px-4 py-2 pl-12 rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                className={`w-full px-4 py-2 pl-12 rounded-full border transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 ${
                   darkTheme
-                    ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-400'
+                    ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-400'
                     : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-500'
                 }`}
               />
