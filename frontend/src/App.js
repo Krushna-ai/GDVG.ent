@@ -698,6 +698,8 @@ function App() {
           onClose={closeModal}
         />
       )}
+
+      <Footer darkTheme={darkTheme} />
     </div>
   );
 }
