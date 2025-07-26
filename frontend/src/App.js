@@ -336,10 +336,10 @@ const ContentDetailModal = ({ content, darkTheme, onClose }) => {
               </div>
               
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                content.content_type === 'movie' ? 'bg-red-100 text-red-800' :
-                content.content_type === 'series' ? 'bg-blue-100 text-blue-800' :
-                content.content_type === 'drama' ? 'bg-purple-100 text-purple-800' :
-                'bg-green-100 text-green-800'
+                content.content_type === 'movie' ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' :
+                content.content_type === 'series' ? 'bg-red-200 text-red-900 dark:bg-red-800/50 dark:text-red-200' :
+                content.content_type === 'drama' ? 'bg-red-300 text-red-900 dark:bg-red-700/50 dark:text-red-100' :
+                'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
               }`}>
                 {content.content_type.charAt(0).toUpperCase() + content.content_type.slice(1)}
               </span>
