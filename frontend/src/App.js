@@ -166,10 +166,10 @@ const ContentCard = ({ content, darkTheme, onClick }) => {
           {/* Content Type Badge */}
           <div className="absolute top-3 left-3">
             <span className={`px-2 py-1 rounded-lg text-xs font-semibold uppercase ${
-              content.content_type === 'movie' ? 'bg-red-500 text-white' :
-              content.content_type === 'series' ? 'bg-blue-500 text-white' :
-              content.content_type === 'drama' ? 'bg-purple-500 text-white' :
-              'bg-green-500 text-white'
+              content.content_type === 'movie' ? 'bg-red-600 text-white' :
+              content.content_type === 'series' ? 'bg-red-700 text-white' :
+              content.content_type === 'drama' ? 'bg-red-800 text-white' :
+              'bg-red-500 text-white'
             }`}>
               {content.content_type}
             </span>
