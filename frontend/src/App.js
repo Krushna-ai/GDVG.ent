@@ -443,7 +443,7 @@ const ContentDetailModal = ({ content, darkTheme, onClose }) => {
                   {content.streaming_platforms.map((platform) => (
                     <span
                       key={platform}
-                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-medium"
+                      className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-medium hover:from-red-700 hover:to-red-800 transition-all duration-200"
                     >
                       {platform}
                     </span>
