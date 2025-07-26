@@ -159,6 +159,39 @@ class ContentResponse(BaseModel):
     page: int
     limit: int
 
+# Authentication Functions
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    """Verify password against hash"""
+    return hash_password(password) == hashed_password
+
+def create_access_token(data: dict):
+    """Create JWT access token"""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current admin user from JWT token"""
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    
+    admin = await db.admins.find_one({"username": username})
+    if admin is None:
+        raise HTTPException(status_code=401, detail="Admin not found")
+    
+    return AdminUser(**admin)
+
 # API Routes
 @api_router.get("/")
 async def root():
