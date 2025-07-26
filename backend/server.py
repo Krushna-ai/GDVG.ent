@@ -197,6 +197,57 @@ async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(
 async def root():
     return {"message": "Global Drama Verse Guide API"}
 
+# Admin Authentication Routes
+@api_router.post("/admin/login", response_model=Token)
+async def admin_login(admin_data: AdminLogin):
+    """Admin login endpoint"""
+    admin = await db.admins.find_one({"username": admin_data.username})
+    
+    if not admin or not verify_password(admin_data.password, admin["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password"
+        )
+    
+    access_token = create_access_token(data={"sub": admin_data.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@api_router.get("/admin/stats", response_model=AdminStats)
+async def get_admin_stats(current_admin: AdminUser = Depends(get_current_admin)):
+    """Get admin dashboard statistics"""
+    
+    # Get total counts
+    total_content = await db.content.count_documents({})
+    total_movies = await db.content.count_documents({"content_type": "movie"})
+    total_series = await db.content.count_documents({"content_type": "series"})
+    total_dramas = await db.content.count_documents({"content_type": "drama"})
+    total_anime = await db.content.count_documents({"content_type": "anime"})
+    
+    # Get unique countries count
+    countries = await db.content.distinct("country")
+    countries_count = len(countries)
+    
+    # Get recent additions (last 7 days)
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    recent_additions = await db.content.count_documents({
+        "created_at": {"$gte": seven_days_ago}
+    })
+    
+    return AdminStats(
+        total_content=total_content,
+        total_movies=total_movies,
+        total_series=total_series,
+        total_dramas=total_dramas,
+        total_anime=total_anime,
+        countries=countries_count,
+        recent_additions=recent_additions
+    )
+
+@api_router.get("/admin/me")
+async def get_current_admin_info(current_admin: AdminUser = Depends(get_current_admin)):
+    """Get current admin user info"""
+    return {"username": current_admin.username, "is_admin": current_admin.is_admin}
+
 @api_router.get("/content", response_model=ContentResponse)
 async def get_content(
     page: int = Query(1, ge=1),
