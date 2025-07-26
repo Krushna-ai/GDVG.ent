@@ -485,7 +485,19 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database with sample data"""
+    """Initialize database with sample data and admin user"""
+    
+    # Create default admin if not exists
+    admin_exists = await db.admins.find_one({"username": "admin"})
+    if not admin_exists:
+        default_admin = AdminUser(
+            username="admin",
+            password_hash=hash_password("admin123"),
+            is_admin=True
+        )
+        await db.admins.insert_one(default_admin.dict())
+        logger.info("Created default admin user (username: admin, password: admin123)")
+    
     # Check if content collection is empty
     count = await db.content.count_documents({})
     if count == 0:
