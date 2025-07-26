@@ -379,7 +379,7 @@ const ContentGrid = ({ contents, darkTheme, onContentClick, loading }) => {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
         {[...Array(10)].map((_, i) => (
           <div key={i} className={`animate-pulse rounded-xl ${
-            darkTheme ? 'bg-gray-800' : 'bg-gray-200'
+            darkTheme ? 'bg-gray-900 border border-gray-800' : 'bg-gray-200'
           }`}>
             <div className="aspect-[2/3] rounded-t-xl bg-current opacity-20" />
             <div className="p-4 space-y-2">
