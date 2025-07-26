@@ -614,11 +614,44 @@ function App() {
   const [selectedContent, setSelectedContent] = useState(null);
   const [darkTheme, setDarkTheme] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     document.title = 'GDVG - Global Drama Verse Guide';
-    fetchContents();
+    
+    // Check if user is accessing admin route
+    if (window.location.pathname.startsWith('/admin')) {
+      setIsAdminMode(true);
+      
+      // Check if admin is already authenticated
+      const token = localStorage.getItem('admin_token');
+      if (token) {
+        setIsAuthenticated(true);
+      }
+    } else {
+      fetchContents();
+    }
   }, []);
+
+  const handleAdminLogin = (token) => {
+    setIsAuthenticated(true);
+  };
+
+  const handleAdminLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('admin_token');
+    // Redirect to main site
+    window.location.href = '/';
+  };
+
+  // Admin Mode
+  if (isAdminMode) {
+    if (!isAuthenticated) {
+      return <AdminLogin onLogin={handleAdminLogin} darkTheme={darkTheme} />;
+    }
+    return <AdminDashboard darkTheme={darkTheme} onLogout={handleAdminLogout} />;
+  }
 
   const fetchContents = async (search = '') => {
     try {
