@@ -408,7 +408,7 @@ const ContentDetailModal = ({ content, darkTheme, onClose }) => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {content.cast.slice(0, 6).map((actor) => (
                     <div key={actor.id} className={`flex items-center gap-3 p-3 rounded-lg ${
-                      darkTheme ? 'bg-gray-800' : 'bg-gray-50'
+                      darkTheme ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'
                     }`}>
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
                         darkTheme ? 'bg-gray-700' : 'bg-gray-200'
