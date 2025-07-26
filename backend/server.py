@@ -120,8 +120,8 @@ class Content(BaseModel):
 class ContentCreate(BaseModel):
     title: str
     original_title: Optional[str] = None
-    poster_url: str
-    banner_url: Optional[str] = None
+    poster_url: str  # base64 image data
+    banner_url: Optional[str] = None  # base64 image data
     synopsis: str
     year: int
     country: str
@@ -134,6 +134,24 @@ class ContentCreate(BaseModel):
     crew: List[CrewMember] = []
     streaming_platforms: List[str] = []
     tags: List[str] = []
+
+class ContentUpdate(BaseModel):
+    title: Optional[str] = None
+    original_title: Optional[str] = None
+    poster_url: Optional[str] = None
+    banner_url: Optional[str] = None
+    synopsis: Optional[str] = None
+    year: Optional[int] = None
+    country: Optional[str] = None
+    content_type: Optional[ContentType] = None
+    genres: Optional[List[ContentGenre]] = None
+    rating: Optional[float] = None
+    episodes: Optional[int] = None
+    duration: Optional[int] = None
+    cast: Optional[List[CastMember]] = None
+    crew: Optional[List[CrewMember]] = None
+    streaming_platforms: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
 
 class ContentResponse(BaseModel):
     contents: List[Content]
