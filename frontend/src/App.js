@@ -24,8 +24,8 @@ const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <h1 className={`text-2xl font-bold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent`}>
-              Global Drama Verse
+            <h1 className={`text-3xl font-bold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent tracking-wider`}>
+              GDVG
             </h1>
           </div>
 
