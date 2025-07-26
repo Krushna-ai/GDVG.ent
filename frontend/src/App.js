@@ -614,6 +614,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
+    document.title = 'GDVG - Global Drama Verse Guide';
     fetchContents();
   }, []);
 
