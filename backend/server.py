@@ -58,6 +58,31 @@ class ContentGenre(str, Enum):
     CRIME = "crime"
     ADVENTURE = "adventure"
 
+# Admin Models
+class AdminUser(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    username: str
+    password_hash: str
+    is_admin: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class AdminLogin(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class AdminStats(BaseModel):
+    total_content: int
+    total_movies: int
+    total_series: int
+    total_dramas: int
+    total_anime: int
+    countries: int
+    recent_additions: int
+
 # Content Models
 class CastMember(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
