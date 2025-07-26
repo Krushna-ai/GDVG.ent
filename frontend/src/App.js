@@ -502,7 +502,7 @@ function App() {
 
   return (
     <div className={`min-h-screen transition-all duration-300 ${
-      darkTheme ? 'bg-gray-900' : 'bg-gray-50'
+      darkTheme ? 'bg-black' : 'bg-gray-50'
     }`}>
       <Header 
         onSearch={handleSearch} 
