@@ -439,7 +439,7 @@ const ContentDetailModal = ({ content, darkTheme, onClose }) => {
         </div>
 
         <div className={`inline-block align-bottom rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full ${
-          darkTheme ? 'bg-gray-900' : 'bg-white'
+          darkTheme ? 'bg-black border border-red-900/50' : 'bg-white border border-gray-200'
         }`}>
           {/* Header with banner */}
           <div className="relative h-64 overflow-hidden">
