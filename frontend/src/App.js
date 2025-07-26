@@ -411,7 +411,7 @@ const ContentDetailModal = ({ content, darkTheme, onClose }) => {
                       darkTheme ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'
                     }`}>
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                        darkTheme ? 'bg-gray-700' : 'bg-gray-200'
+                        darkTheme ? 'bg-gray-700 border border-gray-600' : 'bg-gray-200 border border-gray-300'
                       }`}>
                         <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
