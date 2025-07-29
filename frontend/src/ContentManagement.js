@@ -621,12 +621,24 @@ const ContentManagement = ({ darkTheme, onStatsUpdate }) => {
         }`}>
           Content Management
         </h2>
-        <button
-          onClick={() => setCurrentView('add')}
-          className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
-        >
-          Add New Content
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setCurrentView('bulk-import')}
+            className={`px-4 py-2 rounded-lg transition-colors ${
+              darkTheme
+                ? 'bg-gray-800 text-white hover:bg-gray-700'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Bulk Import
+          </button>
+          <button
+            onClick={() => setCurrentView('add')}
+            className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
+          >
+            Add New Content
+          </button>
+        </div>
       </div>
 
       {/* Search */}
