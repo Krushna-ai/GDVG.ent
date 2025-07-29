@@ -8,7 +8,7 @@ const API = `${BACKEND_URL}/api`;
 const ContentManagement = ({ darkTheme, onStatsUpdate }) => {
   const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('list'); // 'list', 'add', 'edit'
+  const [currentView, setCurrentView] = useState('list'); // 'list', 'add', 'edit', 'bulk-import'
   const [selectedContent, setSelectedContent] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [pagination, setPagination] = useState({
