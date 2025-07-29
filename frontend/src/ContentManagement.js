@@ -813,6 +813,35 @@ const ContentManagement = ({ darkTheme, onStatsUpdate }) => {
     <div>
       {currentView === 'list' && <ContentList />}
       {(currentView === 'add' || currentView === 'edit') && <ContentForm />}
+      {currentView === 'bulk-import' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className={`text-2xl font-bold ${
+              darkTheme ? 'text-white' : 'text-gray-900'
+            }`}>
+              Bulk Import Content
+            </h2>
+            <button
+              onClick={() => setCurrentView('list')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                darkTheme
+                  ? 'bg-gray-800 text-white hover:bg-gray-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Back to List
+            </button>
+          </div>
+          <BulkImport 
+            darkTheme={darkTheme} 
+            onImportComplete={() => {
+              fetchContents();
+              onStatsUpdate();
+              setCurrentView('list');
+            }} 
+          />
+        </div>
+      )}
     </div>
   );
 };
