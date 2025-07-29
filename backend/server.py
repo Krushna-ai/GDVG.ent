@@ -556,6 +556,125 @@ async def admin_get_content(
         limit=limit
     )
 
+@api_router.post("/admin/bulk-import", response_model=BulkImportResult)
+async def admin_bulk_import(
+    file: UploadFile = File(...),
+    current_admin: AdminUser = Depends(get_current_admin)
+):
+    """Admin: Bulk import content from Excel/CSV file"""
+    
+    # Validate file type
+    if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid file format. Please upload .xlsx, .xls, or .csv files only."
+        )
+    
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Parse file
+        df = parse_excel_csv_file(file_content, file.filename)
+        
+        if df.empty:
+            raise HTTPException(status_code=400, detail="File is empty or has no valid data")
+        
+        # Process each row
+        successful_imports = 0
+        failed_imports = 0
+        errors = []
+        imported_content = []
+        
+        for index, row in df.iterrows():
+            try:
+                content_data = validate_and_convert_row(row)
+                
+                if content_data is None:
+                    failed_imports += 1
+                    errors.append(f"Row {index + 1}: Missing required fields or invalid data")
+                    continue
+                
+                # Check if content already exists (by title and year)
+                existing = await db.content.find_one({
+                    "title": content_data["title"],
+                    "year": content_data["year"]
+                })
+                
+                if existing:
+                    failed_imports += 1
+                    errors.append(f"Row {index + 1}: Content '{content_data['title']}' ({content_data['year']}) already exists")
+                    continue
+                
+                # Insert into database
+                await db.content.insert_one(content_data)
+                successful_imports += 1
+                imported_content.append(f"{content_data['title']} ({content_data['year']})")
+                
+            except Exception as e:
+                failed_imports += 1
+                errors.append(f"Row {index + 1}: {str(e)}")
+        
+        return BulkImportResult(
+            success=successful_imports > 0,
+            total_rows=len(df),
+            successful_imports=successful_imports,
+            failed_imports=failed_imports,
+            errors=errors[:20],  # Limit errors to first 20
+            imported_content=imported_content[:20]  # Limit list to first 20
+        )
+        
+    except Exception as e:
+        logger.error(f"Bulk import error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+
+@api_router.get("/admin/bulk-import/template")
+async def download_template(current_admin: AdminUser = Depends(get_current_admin)):
+    """Admin: Download bulk import template"""
+    
+    template_data = {
+        'title': ['Squid Game', 'Parasite'],
+        'original_title': ['오징어 게임', '기생충'],
+        'year': [2021, 2019],
+        'country': ['South Korea', 'South Korea'],
+        'content_type': ['series', 'movie'],
+        'synopsis': [
+            'A desperate group of people compete in children\'s games for a massive cash prize.',
+            'A poor family schemes to become employed by a wealthy family.'
+        ],
+        'rating': [8.7, 8.5],
+        'genres': ['thriller,drama,mystery', 'thriller,drama,comedy'],
+        'episodes': [9, None],
+        'duration': [None, 132],
+        'cast': [
+            '[{"name": "Lee Jung-jae", "character": "Seong Gi-hun"}]',
+            '[{"name": "Song Kang-ho", "character": "Ki-taek"}]'
+        ],
+        'crew': [
+            '[{"name": "Hwang Dong-hyuk", "role": "director"}]',
+            '[{"name": "Bong Joon-ho", "role": "director"}]'
+        ],
+        'streaming_platforms': ['Netflix', 'Hulu,Amazon Prime'],
+        'tags': ['survival,korean,psychological', 'oscar winner,social commentary'],
+        'poster_url': ['', ''],  # Optional - will use default if empty
+        'banner_url': ['', '']   # Optional
+    }
+    
+    df = pd.DataFrame(template_data)
+    
+    # Create Excel file in memory
+    excel_buffer = io.BytesIO()
+    df.to_excel(excel_buffer, index=False, sheet_name='Content Template')
+    excel_buffer.seek(0)
+    
+    return {
+        "message": "Template structure",
+        "columns": list(template_data.keys()),
+        "required_columns": ["title", "year", "country", "content_type", "synopsis", "rating"],
+        "optional_columns": ["original_title", "episodes", "duration", "cast", "crew", "streaming_platforms", "tags", "poster_url", "banner_url"],
+        "sample_data": template_data
+    }
+
 @api_router.get("/trending", response_model=List[Content])
 async def get_trending_content(limit: int = Query(10, ge=1, le=50)):
     """Get trending content (highest rated recent content)"""
