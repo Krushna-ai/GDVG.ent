@@ -219,8 +219,8 @@ const BulkImport = ({ darkTheme, onImportComplete }) => {
                 darkTheme ? 'text-gray-400' : 'text-gray-600'
               }`}>
                 <li><strong>Genres:</strong> Comma-separated (e.g., "thriller,drama,mystery")</li>
-                <li><strong>Cast:</strong> JSON format [{&quot;name&quot;: &quot;Actor Name&quot;, &quot;character&quot;: &quot;Character&quot;}]</li>
-                <li><strong>Crew:</strong> JSON format [{&quot;name&quot;: &quot;Director Name&quot;, &quot;role&quot;: &quot;director&quot;}]</li>
+                <li><strong>Cast:</strong> JSON format [name, character fields]</li>
+                <li><strong>Crew:</strong> JSON format [name, role fields]</li>
                 <li><strong>Streaming Platforms:</strong> Comma-separated (e.g., "Netflix,Hulu")</li>
                 <li><strong>Rating:</strong> Number between 0-10</li>
               </ul>
