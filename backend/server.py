@@ -86,6 +86,14 @@ class AdminStats(BaseModel):
     countries: int
     recent_additions: int
 
+class BulkImportResult(BaseModel):
+    success: bool
+    total_rows: int
+    successful_imports: int
+    failed_imports: int
+    errors: List[str]
+    imported_content: List[str]  # List of imported content titles
+
 # Content Models
 class CastMember(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
