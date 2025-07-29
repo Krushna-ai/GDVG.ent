@@ -203,6 +203,116 @@ async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(
     
     return AdminUser(**admin)
 
+def parse_excel_csv_file(file_content: bytes, filename: str) -> pd.DataFrame:
+    """Parse Excel or CSV file content"""
+    try:
+        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+            df = pd.read_excel(io.BytesIO(file_content))
+        elif filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(file_content))
+        else:
+            raise ValueError("Unsupported file format. Use .xlsx, .xls, or .csv")
+        
+        return df
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error parsing file: {str(e)}")
+
+def validate_and_convert_row(row: pd.Series) -> Optional[dict]:
+    """Validate and convert a single row to content format"""
+    try:
+        # Required fields validation
+        required_fields = ['title', 'year', 'country', 'content_type', 'synopsis', 'rating']
+        for field in required_fields:
+            if pd.isna(row.get(field)) or str(row.get(field)).strip() == '':
+                return None
+        
+        # Parse genres (comma-separated string to list)
+        genres = []
+        if not pd.isna(row.get('genres')):
+            genre_list = str(row['genres']).split(',')
+            for genre in genre_list:
+                clean_genre = genre.strip().lower().replace(' ', '_')
+                if clean_genre in [g.value for g in ContentGenre]:
+                    genres.append(clean_genre)
+        
+        # Parse streaming platforms
+        streaming_platforms = []
+        if not pd.isna(row.get('streaming_platforms')):
+            streaming_platforms = [p.strip() for p in str(row['streaming_platforms']).split(',') if p.strip()]
+        
+        # Parse cast (JSON string or comma-separated names)
+        cast = []
+        if not pd.isna(row.get('cast')):
+            cast_str = str(row['cast'])
+            try:
+                # Try to parse as JSON first
+                cast_data = json.loads(cast_str)
+                if isinstance(cast_data, list):
+                    cast = [{"id": str(uuid.uuid4()), "name": member.get("name", ""), 
+                            "character": member.get("character", ""), "profile_image": None} 
+                           for member in cast_data if isinstance(member, dict) and member.get("name")]
+            except:
+                # Fallback to comma-separated names
+                cast_names = [name.strip() for name in cast_str.split(',') if name.strip()]
+                cast = [{"id": str(uuid.uuid4()), "name": name, "character": "", "profile_image": None} 
+                       for name in cast_names]
+        
+        # Parse crew
+        crew = []
+        if not pd.isna(row.get('crew')):
+            crew_str = str(row['crew'])
+            try:
+                crew_data = json.loads(crew_str)
+                if isinstance(crew_data, list):
+                    crew = [{"id": str(uuid.uuid4()), "name": member.get("name", ""), 
+                            "role": member.get("role", ""), "profile_image": None} 
+                           for member in crew_data if isinstance(member, dict) and member.get("name")]
+            except:
+                # Simple fallback - assume director
+                crew = [{"id": str(uuid.uuid4()), "name": crew_str.strip(), "role": "director", "profile_image": None}]
+        
+        # Parse tags
+        tags = []
+        if not pd.isna(row.get('tags')):
+            tags = [tag.strip() for tag in str(row['tags']).split(',') if tag.strip()]
+        
+        # Build content object
+        content_data = {
+            "id": str(uuid.uuid4()),
+            "title": str(row['title']).strip(),
+            "original_title": str(row.get('original_title', '')).strip() or None,
+            "poster_url": str(row.get('poster_url', '')).strip() or "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",  # Default 1x1 transparent image
+            "banner_url": str(row.get('banner_url', '')).strip() or None,
+            "synopsis": str(row['synopsis']).strip(),
+            "year": int(row['year']),
+            "country": str(row['country']).strip(),
+            "content_type": str(row['content_type']).lower().strip(),
+            "genres": genres,
+            "rating": float(row['rating']),
+            "episodes": int(row['episodes']) if not pd.isna(row.get('episodes')) and str(row['episodes']).isdigit() else None,
+            "duration": int(row['duration']) if not pd.isna(row.get('duration')) and str(row['duration']).isdigit() else None,
+            "cast": cast,
+            "crew": crew,
+            "streaming_platforms": streaming_platforms,
+            "tags": tags,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+        
+        # Validate content type
+        if content_data['content_type'] not in [ct.value for ct in ContentType]:
+            return None
+        
+        # Validate rating range
+        if not (0 <= content_data['rating'] <= 10):
+            return None
+            
+        return content_data
+        
+    except Exception as e:
+        logger.error(f"Error validating row: {str(e)}")
+        return None
+
 # API Routes
 @api_router.get("/")
 async def root():
