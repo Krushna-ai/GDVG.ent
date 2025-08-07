@@ -716,6 +716,21 @@ function App() {
     setShowUserAuth(true);
   };
 
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUserType(null);
+    setCurrentUser(null);
+    localStorage.removeItem('user_token');
+    localStorage.removeItem('admin_token');
+    
+    if (isAdminMode) {
+      // Redirect to main site
+      window.location.href = '/';
+    } else {
+      fetchContents();
+    }
+  };
+
   // Admin Mode
   if (isAdminMode) {
     if (!isAuthenticated || userType !== 'admin') {
