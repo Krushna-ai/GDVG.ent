@@ -48,6 +48,10 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
     onLogout();
   };
 
+  const handleProfileUpdate = (updatedProfile) => {
+    setUserProfile(updatedProfile);
+  };
+
   const UserHeader = () => (
     <header className={`sticky top-0 z-50 backdrop-blur-md border-b transition-all duration-300 ${
       darkTheme 
