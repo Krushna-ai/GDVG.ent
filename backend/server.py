@@ -69,6 +69,46 @@ class AdminUser(BaseModel):
     is_admin: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+# User Models
+class User(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: str
+    username: str
+    password_hash: str
+    first_name: str
+    last_name: str
+    avatar_url: Optional[str] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    is_verified: bool = False
+    is_active: bool = True
+    joined_date: datetime = Field(default_factory=datetime.utcnow)
+    last_login: Optional[datetime] = None
+    preferences: dict = Field(default_factory=dict)
+
+class UserCreate(BaseModel):
+    email: str
+    username: str
+    password: str
+    first_name: str
+    last_name: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    username: str
+    first_name: str
+    last_name: str
+    avatar_url: Optional[str]
+    bio: Optional[str]
+    location: Optional[str]
+    joined_date: datetime
+    is_verified: bool
+
 class AdminLogin(BaseModel):
     username: str
     password: str
