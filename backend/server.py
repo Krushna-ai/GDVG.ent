@@ -1827,6 +1827,7 @@ async def get_activity_feed(
             "as": "content"
         }},
         {"$project": {
+            "_id": 0,
             "activity_type": 1,
             "metadata": 1,
             "created_at": 1,
