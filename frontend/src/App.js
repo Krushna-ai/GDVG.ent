@@ -157,7 +157,7 @@ const Footer = ({ darkTheme }) => {
 };
 
 // Header Component
-const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
+const Header = ({ onSearch, darkTheme, setDarkTheme, onAuthClick }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleSearch = (e) => {
