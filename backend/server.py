@@ -3031,6 +3031,433 @@ async def should_show_ads(current_user: User = Depends(get_current_user)):
         "reason": "free_user" if show_ads else "premium_user"
     }
 
+# Enhanced Admin Panel - Advanced Content Management
+@api_router.post("/admin/content/smart-import")
+async def smart_bulk_import(
+    file: UploadFile = File(...),
+    merge_strategy: str = Query("update", regex="^(update|skip|replace)$"),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Enhanced bulk import with smart parsing and duplicate handling"""
+    
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="File must be Excel (.xlsx/.xls) or CSV (.csv)")
+    
+    try:
+        # Read file content
+        content = await file.read()
+        
+        # Parse file based on extension
+        if file.filename.endswith('.csv'):
+            import io
+            df = pd.read_csv(io.StringIO(content.decode('utf-8')))
+        else:
+            df = pd.read_excel(io.BytesIO(content))
+        
+        # Smart column mapping - flexible parsing
+        column_mapping = smart_column_detection(df.columns.tolist())
+        
+        # Process each row with flexible parsing
+        imported_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                # Parse content data flexibly
+                content_data = parse_flexible_content_row(row, column_mapping)
+                
+                if not content_data.get('title'):
+                    errors.append(f"Row {index + 2}: Missing title, skipping")
+                    skipped_count += 1
+                    continue
+                
+                # Check for duplicates using smart matching
+                existing_content = await find_duplicate_content(content_data)
+                
+                if existing_content:
+                    if merge_strategy == "skip":
+                        skipped_count += 1
+                        continue
+                    elif merge_strategy == "update":
+                        # Merge new data with existing
+                        merged_data = merge_content_data(existing_content, content_data)
+                        await db.content.update_one(
+                            {"id": existing_content["id"]},
+                            {"$set": merged_data}
+                        )
+                        updated_count += 1
+                    else:  # replace
+                        content_data["id"] = existing_content["id"]
+                        await db.content.replace_one(
+                            {"id": existing_content["id"]},
+                            content_data
+                        )
+                        updated_count += 1
+                else:
+                    # Create new content
+                    content_data["id"] = str(uuid.uuid4())
+                    await db.content.insert_one(content_data)
+                    imported_count += 1
+                    
+            except Exception as e:
+                errors.append(f"Row {index + 2}: {str(e)}")
+                continue
+        
+        return {
+            "message": "Smart import completed",
+            "imported": imported_count,
+            "updated": updated_count,
+            "skipped": skipped_count,
+            "errors": errors[:10],  # Limit error display
+            "total_errors": len(errors),
+            "detected_columns": column_mapping,
+            "merge_strategy": merge_strategy
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"File processing error: {str(e)}")
+
+@api_router.post("/admin/content/web-scrape")
+async def initiate_web_scraping(
+    source: str = Query(..., regex="^(mydramalist|imdb|tmdb|manual)$"),
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Web scraping for latest content from various sources"""
+    
+    try:
+        scraped_data = []
+        
+        if source == "mydramalist":
+            scraped_data = await scrape_mydramalist(query, limit)
+        elif source == "imdb":
+            scraped_data = await scrape_imdb_basic(query, limit)
+        elif source == "tmdb":
+            scraped_data = await scrape_tmdb(query, limit)
+        else:  # manual
+            scraped_data = await manual_content_search(query, limit)
+        
+        # Process scraped data and check for duplicates
+        processed_results = []
+        for item in scraped_data:
+            # Check if content already exists
+            existing = await find_duplicate_content(item)
+            item["exists_in_db"] = existing is not None
+            item["existing_id"] = existing["id"] if existing else None
+            processed_results.append(item)
+        
+        return {
+            "source": source,
+            "query": query,
+            "results": processed_results,
+            "count": len(processed_results),
+            "new_content": sum(1 for item in processed_results if not item["exists_in_db"])
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scraping error: {str(e)}")
+
+@api_router.post("/admin/content/api-sync")
+async def sync_with_external_apis(
+    api_source: str = Query(..., regex="^(tmdb|omdb|tvmaze)$"),
+    sync_type: str = Query("update", regex="^(update|refresh|new_only)$"),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Sync content database with external APIs"""
+    
+    try:
+        synced_count = 0
+        updated_count = 0
+        errors = []
+        
+        # Get existing content that needs updating
+        if sync_type in ["update", "refresh"]:
+            cursor = db.content.find({
+                "$or": [
+                    {"poster_url": {"$exists": False}},
+                    {"rating": {"$lt": 1}},
+                    {"synopsis": {"$exists": False}},
+                    {"last_api_sync": {"$lt": datetime.utcnow() - timedelta(days=30)}}
+                ]
+            }).limit(50)  # Batch processing
+            
+            content_to_sync = await cursor.to_list(50)
+            
+            for content in content_to_sync:
+                try:
+                    # Fetch updated data from API
+                    api_data = await fetch_from_external_api(content["title"], api_source)
+                    
+                    if api_data:
+                        # Merge API data with existing content
+                        updated_data = merge_api_data(content, api_data)
+                        updated_data["last_api_sync"] = datetime.utcnow()
+                        
+                        await db.content.update_one(
+                            {"id": content["id"]},
+                            {"$set": updated_data}
+                        )
+                        updated_count += 1
+                        
+                except Exception as e:
+                    errors.append(f"{content['title']}: {str(e)}")
+                    continue
+        
+        return {
+            "api_source": api_source,
+            "sync_type": sync_type,
+            "synced": synced_count,
+            "updated": updated_count,
+            "errors": errors[:5],
+            "total_errors": len(errors)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"API sync error: {str(e)}")
+
+@api_router.get("/admin/analytics/dashboard")
+async def get_admin_dashboard_analytics(current_admin: User = Depends(get_current_admin)):
+    """Comprehensive admin dashboard analytics"""
+    
+    # Content statistics
+    total_content = await db.content.count_documents({})
+    content_by_type = await db.content.aggregate([
+        {"$group": {"_id": "$content_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]).to_list(10)
+    
+    content_by_country = await db.content.aggregate([
+        {"$group": {"_id": "$country", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]).to_list(10)
+    
+    # User statistics
+    total_users = await db.users.count_documents({})
+    active_users_week = await db.users.count_documents({
+        "last_activity": {"$gte": datetime.utcnow() - timedelta(days=7)}
+    })
+    
+    # Review statistics
+    total_reviews = await db.reviews.count_documents({})
+    recent_reviews = await db.reviews.count_documents({
+        "created_date": {"$gte": datetime.utcnow() - timedelta(days=7)}
+    })
+    
+    # Popular content
+    popular_content = await db.content.aggregate([
+        {"$lookup": {
+            "from": "reviews",
+            "localField": "id",
+            "foreignField": "content_id",
+            "as": "reviews"
+        }},
+        {"$addFields": {
+            "review_count": {"$size": "$reviews"},
+            "popularity_score": {"$multiply": ["$rating", {"$size": "$reviews"}]}
+        }},
+        {"$sort": {"popularity_score": -1}},
+        {"$limit": 5},
+        {"$project": {"title": 1, "rating": 1, "review_count": 1, "country": 1}}
+    ]).to_list(5)
+    
+    return {
+        "content_stats": {
+            "total_content": total_content,
+            "by_type": [{"type": item["_id"], "count": item["count"]} for item in content_by_type],
+            "by_country": [{"country": item["_id"], "count": item["count"]} for item in content_by_country]
+        },
+        "user_stats": {
+            "total_users": total_users,
+            "active_this_week": active_users_week,
+            "activity_rate": round((active_users_week / total_users) * 100, 1) if total_users > 0 else 0
+        },
+        "review_stats": {
+            "total_reviews": total_reviews,
+            "recent_reviews": recent_reviews
+        },
+        "popular_content": popular_content
+    }
+
+# Helper functions for enhanced admin features
+def smart_column_detection(columns):
+    """Detect and map columns flexibly"""
+    column_mapping = {}
+    
+    # Title variations
+    title_cols = ['title', 'name', 'drama_name', 'movie_name', 'series_name', 'show_name']
+    for col in columns:
+        if any(t in col.lower() for t in title_cols):
+            column_mapping['title'] = col
+            break
+    
+    # Other field mappings
+    field_mappings = {
+        'country': ['country', 'nation', 'origin', 'region'],
+        'year': ['year', 'release_year', 'date', 'released'],
+        'rating': ['rating', 'score', 'imdb_rating', 'user_rating'],
+        'content_type': ['type', 'content_type', 'category', 'genre_type'],
+        'synopsis': ['synopsis', 'description', 'plot', 'summary'],
+        'genres': ['genres', 'genre', 'tags', 'categories'],
+        'episodes': ['episodes', 'episode_count', 'total_episodes'],
+        'duration': ['duration', 'runtime', 'length', 'minutes'],
+        'poster_url': ['poster', 'poster_url', 'image', 'thumbnail'],
+        'streaming_platforms': ['platforms', 'streaming', 'available_on']
+    }
+    
+    for field, variations in field_mappings.items():
+        for col in columns:
+            if any(v in col.lower() for v in variations):
+                column_mapping[field] = col
+                break
+    
+    return column_mapping
+
+def parse_flexible_content_row(row, column_mapping):
+    """Parse content row with flexible field mapping"""
+    content_data = {}
+    
+    # Extract data based on column mapping
+    for field, column in column_mapping.items():
+        if column in row.index and pd.notna(row[column]):
+            value = row[column]
+            
+            # Special processing for different field types
+            if field == 'genres' and isinstance(value, str):
+                # Handle comma-separated or JSON-like genres
+                if '[' in value and ']' in value:
+                    try:
+                        import ast
+                        content_data[field] = ast.literal_eval(value)
+                    except:
+                        content_data[field] = [g.strip() for g in value.replace('[', '').replace(']', '').replace('"', '').split(',')]
+                else:
+                    content_data[field] = [g.strip() for g in str(value).split(',')]
+            elif field == 'streaming_platforms' and isinstance(value, str):
+                content_data[field] = [p.strip() for p in str(value).split(',')]
+            elif field in ['year', 'episodes', 'duration']:
+                try:
+                    content_data[field] = int(float(value)) if pd.notna(value) else None
+                except:
+                    content_data[field] = None
+            elif field == 'rating':
+                try:
+                    content_data[field] = float(value) if pd.notna(value) else 0.0
+                except:
+                    content_data[field] = 0.0
+            else:
+                content_data[field] = str(value).strip() if pd.notna(value) else None
+    
+    # Set defaults for required fields
+    if 'content_type' not in content_data:
+        content_data['content_type'] = 'movie'  # Default
+    if 'rating' not in content_data:
+        content_data['rating'] = 0.0
+    if 'genres' not in content_data:
+        content_data['genres'] = ['drama']  # Default genre
+    
+    # Add timestamps
+    content_data['created_at'] = datetime.utcnow()
+    content_data['updated_at'] = datetime.utcnow()
+    
+    return content_data
+
+async def find_duplicate_content(content_data):
+    """Smart duplicate detection using title and year"""
+    if not content_data.get('title'):
+        return None
+    
+    title = content_data['title'].lower().strip()
+    
+    # Try exact title match first
+    query = {"title": {"$regex": f"^{title}$", "$options": "i"}}
+    existing = await db.content.find_one(query)
+    
+    if existing:
+        return existing
+    
+    # Try fuzzy matching for similar titles
+    query = {"title": {"$regex": title.replace(" ", ".*"), "$options": "i"}}
+    
+    if content_data.get('year'):
+        query["year"] = content_data['year']
+    
+    existing = await db.content.find_one(query)
+    return existing
+
+def merge_content_data(existing, new_data):
+    """Merge new content data with existing, preserving valuable information"""
+    merged = existing.copy()
+    
+    # Update fields that have new values
+    for key, value in new_data.items():
+        if key in ['id', 'created_at']:  # Skip these fields
+            continue
+        
+        if value is not None and value != '':
+            if key == 'genres' and isinstance(value, list):
+                # Merge genres
+                existing_genres = set(existing.get('genres', []))
+                new_genres = set(value)
+                merged[key] = list(existing_genres.union(new_genres))
+            elif key == 'streaming_platforms' and isinstance(value, list):
+                # Merge streaming platforms
+                existing_platforms = set(existing.get('streaming_platforms', []))
+                new_platforms = set(value)
+                merged[key] = list(existing_platforms.union(new_platforms))
+            elif key == 'rating' and value > existing.get('rating', 0):
+                # Keep higher rating
+                merged[key] = value
+            else:
+                # Update with new value
+                merged[key] = value
+    
+    merged['updated_at'] = datetime.utcnow()
+    return merged
+
+# Web scraping functions (basic implementations)
+async def scrape_mydramalist(query, limit):
+    """Basic MyDramaList scraping - placeholder for actual implementation"""
+    # This would implement actual web scraping
+    return [{"title": f"Sample Drama {i}", "country": "South Korea", "year": 2023} for i in range(limit)]
+
+async def scrape_imdb_basic(query, limit):
+    """Basic IMDb scraping - placeholder for actual implementation"""
+    return [{"title": f"Sample Movie {i}", "country": "USA", "year": 2023} for i in range(limit)]
+
+async def scrape_tmdb(query, limit):
+    """Basic TMDB API integration - placeholder for actual implementation"""
+    return [{"title": f"Sample Content {i}", "country": "Global", "year": 2023} for i in range(limit)]
+
+async def manual_content_search(query, limit):
+    """Manual content database search"""
+    results = await db.content.find({
+        "$or": [
+            {"title": {"$regex": query, "$options": "i"}},
+            {"synopsis": {"$regex": query, "$options": "i"}}
+        ]
+    }).limit(limit).to_list(limit)
+    
+    return [{"title": item["title"], "country": item.get("country"), "year": item.get("year")} for item in results]
+
+async def fetch_from_external_api(title, api_source):
+    """Fetch additional data from external APIs"""
+    # Placeholder for actual API integration
+    return {"rating": 8.5, "poster_url": "https://example.com/poster.jpg"}
+
+def merge_api_data(existing, api_data):
+    """Merge API data with existing content"""
+    merged = existing.copy()
+    
+    for key, value in api_data.items():
+        if value is not None and (key not in merged or not merged[key]):
+            merged[key] = value
+    
+    return merged
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
