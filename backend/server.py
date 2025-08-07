@@ -1316,6 +1316,304 @@ async def update_content_rating(content_id: str):
         }}
     )
 
+# Personal Analytics API Endpoints
+@api_router.post("/analytics/view")
+async def track_viewing(
+    content_id: str,
+    viewing_duration: Optional[int] = None,
+    completion_percentage: Optional[float] = None,
+    device_type: Optional[str] = "web",
+    current_user: User = Depends(get_current_user)
+):
+    """Track user's viewing activity"""
+    
+    # Check if content exists
+    content = await db.content.find_one({"id": content_id})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Create viewing history entry
+    viewing_entry = ViewingHistory(
+        user_id=current_user.id,
+        content_id=content_id,
+        viewing_duration=viewing_duration,
+        completion_percentage=completion_percentage,
+        device_type=device_type
+    )
+    
+    # Insert into database
+    await db.viewing_history.insert_one(viewing_entry.dict())
+    
+    # Update user's last activity
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {"last_activity": datetime.utcnow()}}
+    )
+    
+    return {"message": "Viewing activity tracked successfully"}
+
+@api_router.get("/analytics/dashboard", response_model=UserAnalytics)
+async def get_user_analytics(current_user: User = Depends(get_current_user)):
+    """Get comprehensive user analytics"""
+    
+    # Total content watched (unique content)
+    total_content = await db.viewing_history.aggregate([
+        {"$match": {"user_id": current_user.id}},
+        {"$group": {"_id": "$content_id"}},
+        {"$count": "total"}
+    ]).to_list(1)
+    total_content_watched = total_content[0]["total"] if total_content else 0
+    
+    # Total viewing time
+    total_time = await db.viewing_history.aggregate([
+        {"$match": {"user_id": current_user.id, "viewing_duration": {"$ne": None}}},
+        {"$group": {"_id": None, "total": {"$sum": "$viewing_duration"}}}
+    ]).to_list(1)
+    total_viewing_time = total_time[0]["total"] if total_time else 0
+    
+    # Completion rate from watchlist
+    completed_count = await db.watchlist.count_documents({
+        "user_id": current_user.id,
+        "status": "completed"
+    })
+    total_watchlist = await db.watchlist.count_documents({"user_id": current_user.id})
+    completion_rate = (completed_count / total_watchlist * 100) if total_watchlist > 0 else 0
+    
+    # Favorite genres from watchlist and reviews
+    favorite_genres = await db.watchlist.aggregate([
+        {"$match": {"user_id": current_user.id}},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$unwind": "$content.genres"},
+        {"$group": {"_id": "$content.genres", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 5},
+        {"$project": {"genre": "$_id", "count": 1, "_id": 0}}
+    ]).to_list(5)
+    
+    # Favorite countries
+    favorite_countries = await db.watchlist.aggregate([
+        {"$match": {"user_id": current_user.id}},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$group": {"_id": "$content.country", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 5},
+        {"$project": {"country": "$_id", "count": 1, "_id": 0}}
+    ]).to_list(5)
+    
+    # Viewing streak calculation
+    viewing_streak = await calculate_viewing_streak(current_user.id)
+    
+    # Achievements
+    achievements = await calculate_achievements(current_user.id, {
+        "total_content_watched": total_content_watched,
+        "total_viewing_time": total_viewing_time,
+        "completion_rate": completion_rate
+    })
+    
+    # Monthly stats (last 6 months)
+    monthly_stats = await get_monthly_viewing_stats(current_user.id)
+    
+    # Top rated content by user
+    top_rated_content = await db.reviews.aggregate([
+        {"$match": {"user_id": current_user.id}},
+        {"$sort": {"rating": -1}},
+        {"$limit": 10},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id", 
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$project": {
+            "rating": 1,
+            "title": "$content.title",
+            "poster_url": "$content.poster_url",
+            "year": "$content.year"
+        }}
+    ]).to_list(10)
+    
+    return UserAnalytics(
+        total_content_watched=total_content_watched,
+        total_viewing_time=total_viewing_time,
+        completion_rate=round(completion_rate, 1),
+        favorite_genres=favorite_genres,
+        favorite_countries=favorite_countries,
+        viewing_streak=viewing_streak,
+        achievements=achievements,
+        monthly_stats=monthly_stats,
+        top_rated_content=top_rated_content
+    )
+
+@api_router.get("/analytics/history")
+async def get_viewing_history(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's viewing history"""
+    skip = (page - 1) * limit
+    
+    cursor = db.viewing_history.find({
+        "user_id": current_user.id
+    }).sort("viewed_at", -1).skip(skip).limit(limit)
+    
+    history = await cursor.to_list(length=limit)
+    
+    # Enrich with content data
+    enriched_history = []
+    for entry in history:
+        if '_id' in entry:
+            del entry['_id']
+        
+        content = await db.content.find_one({"id": entry["content_id"]})
+        if content:
+            if '_id' in content:
+                del content['_id']
+            
+            enriched_history.append({
+                **entry,
+                "content": {
+                    "title": content["title"],
+                    "poster_url": content["poster_url"],
+                    "year": content["year"],
+                    "content_type": content["content_type"]
+                }
+            })
+    
+    total = await db.viewing_history.count_documents({"user_id": current_user.id})
+    
+    return {
+        "history": enriched_history,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+# Helper functions for analytics
+async def calculate_viewing_streak(user_id: str) -> int:
+    """Calculate consecutive days of viewing activity"""
+    today = datetime.utcnow().date()
+    streak = 0
+    current_date = today
+    
+    for i in range(365):  # Check up to 1 year
+        start_of_day = datetime.combine(current_date, datetime.min.time())
+        end_of_day = datetime.combine(current_date, datetime.max.time())
+        
+        activity = await db.viewing_history.find_one({
+            "user_id": user_id,
+            "viewed_at": {"$gte": start_of_day, "$lte": end_of_day}
+        })
+        
+        if activity:
+            streak += 1
+            current_date -= timedelta(days=1)
+        else:
+            break
+    
+    return streak
+
+async def calculate_achievements(user_id: str, stats: dict) -> List[str]:
+    """Calculate user achievements based on their activity"""
+    achievements = []
+    
+    # Content-based achievements
+    if stats["total_content_watched"] >= 1:
+        achievements.append("🎬 First Watch")
+    if stats["total_content_watched"] >= 10:
+        achievements.append("🎯 Explorer")
+    if stats["total_content_watched"] >= 50:
+        achievements.append("🌟 Enthusiast")
+    if stats["total_content_watched"] >= 100:
+        achievements.append("🏆 Connoisseur")
+    
+    # Time-based achievements
+    if stats["total_viewing_time"] >= 60:  # 1 hour
+        achievements.append("⏰ Getting Started")
+    if stats["total_viewing_time"] >= 1440:  # 24 hours
+        achievements.append("📺 Binge Watcher")
+    if stats["total_viewing_time"] >= 10080:  # 1 week
+        achievements.append("🎭 Drama Devotee")
+    
+    # Completion achievements
+    if stats["completion_rate"] >= 50:
+        achievements.append("✅ Finisher")
+    if stats["completion_rate"] >= 80:
+        achievements.append("💯 Completionist")
+    
+    # Review achievements
+    review_count = await db.reviews.count_documents({"user_id": user_id})
+    if review_count >= 1:
+        achievements.append("✍️ Reviewer")
+    if review_count >= 10:
+        achievements.append("📝 Critic")
+    if review_count >= 50:
+        achievements.append("🎤 Voice of the Community")
+    
+    return achievements
+
+async def get_monthly_viewing_stats(user_id: str) -> dict:
+    """Get viewing statistics for the last 6 months"""
+    monthly_stats = {}
+    current_date = datetime.utcnow()
+    
+    for i in range(6):
+        # Calculate month/year
+        month_date = current_date - timedelta(days=30*i)
+        month_key = month_date.strftime("%Y-%m")
+        
+        # Get start and end of month
+        start_of_month = month_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if month_date.month == 12:
+            end_of_month = month_date.replace(year=month_date.year+1, month=1, day=1) - timedelta(seconds=1)
+        else:
+            end_of_month = month_date.replace(month=month_date.month+1, day=1) - timedelta(seconds=1)
+        
+        # Count unique content watched
+        unique_content = await db.viewing_history.aggregate([
+            {"$match": {
+                "user_id": user_id,
+                "viewed_at": {"$gte": start_of_month, "$lte": end_of_month}
+            }},
+            {"$group": {"_id": "$content_id"}},
+            {"$count": "total"}
+        ]).to_list(1)
+        
+        content_count = unique_content[0]["total"] if unique_content else 0
+        
+        # Total viewing time
+        total_time = await db.viewing_history.aggregate([
+            {"$match": {
+                "user_id": user_id,
+                "viewed_at": {"$gte": start_of_month, "$lte": end_of_month},
+                "viewing_duration": {"$ne": None}
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$viewing_duration"}}}
+        ]).to_list(1)
+        
+        viewing_time = total_time[0]["total"] if total_time else 0
+        
+        monthly_stats[month_key] = {
+            "content_count": content_count,
+            "viewing_time": viewing_time,
+            "month_name": month_date.strftime("%B %Y")
+        }
+    
+    return monthly_stats
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
