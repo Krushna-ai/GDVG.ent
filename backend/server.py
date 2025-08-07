@@ -2986,6 +2986,51 @@ async def get_user_highly_rated_content(user_id: str, limit: int = 5) -> List[di
     
     return highly_rated
 
+# Ad Management for Free Users
+@api_router.get("/ads/config")
+async def get_ad_configuration():
+    """Get ad configuration for free users"""
+    return {
+        "google_adsense": {
+            "client_id": "ca-pub-YOUR-ADSENSE-ID",  # Replace with actual AdSense ID
+            "enabled": True,
+            "ad_slots": {
+                "banner_top": "1234567890",
+                "banner_sidebar": "0987654321", 
+                "banner_bottom": "1122334455",
+                "native_feed": "5566778899"
+            }
+        },
+        "ad_placements": [
+            {"type": "banner", "position": "top", "size": "728x90"},
+            {"type": "banner", "position": "sidebar", "size": "300x250"},
+            {"type": "native", "position": "feed", "frequency": 5},
+            {"type": "banner", "position": "bottom", "size": "728x90"}
+        ]
+    }
+
+@api_router.get("/ads/should-show")
+async def should_show_ads(current_user: User = Depends(get_current_user)):
+    """Check if ads should be shown to user"""
+    
+    # Check premium status
+    subscription = await db.user_subscriptions.find_one({
+        "user_id": current_user.id,
+        "status": "active"
+    })
+    
+    if subscription:
+        is_premium = subscription["plan_type"] in ["premium", "pro"]
+        is_expired = subscription.get("expires_at") and subscription["expires_at"] < datetime.utcnow()
+        show_ads = not (is_premium and not is_expired)
+    else:
+        show_ads = True  # Free users see ads
+    
+    return {
+        "show_ads": show_ads,
+        "reason": "free_user" if show_ads else "premium_user"
+    }
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
