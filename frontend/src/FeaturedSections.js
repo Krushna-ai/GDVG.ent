@@ -211,12 +211,11 @@ const FeaturedSections = ({ darkTheme, onContentClick }) => {
                   </svg>
                   More Info
                 </button>
-                <button className="px-6 py-3 bg-white/20 backdrop-blur-sm text-white rounded-lg hover:bg-white/30 transition-all duration-200 font-medium">
-                  <svg className="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  Add to List
-                </button>
+                <WatchlistButton 
+                  content={heroContent} 
+                  darkTheme={true} 
+                  size="lg" 
+                />
               </div>
             </div>
           </div>
