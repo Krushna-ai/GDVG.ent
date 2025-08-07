@@ -193,10 +193,28 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <button 
-              onClick={() => setCurrentView('home')}
-              className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 font-medium"
+              onClick={() => setHomeView('featured')}
+              className={`px-6 py-3 rounded-lg transition-all duration-200 font-medium ${
+                homeView === 'featured'
+                  ? 'bg-gradient-to-r from-red-600 to-red-700 text-white'
+                  : darkTheme
+                  ? 'border border-white/20 text-white hover:bg-white/10'
+                  : 'border border-white/30 text-white hover:bg-white/20'
+              }`}
             >
-              Discover New Content
+              Featured Content
+            </button>
+            <button 
+              onClick={() => setHomeView('search')}
+              className={`px-6 py-3 rounded-lg transition-all duration-200 font-medium ${
+                homeView === 'search'
+                  ? 'bg-gradient-to-r from-red-600 to-red-700 text-white'
+                  : darkTheme
+                  ? 'border border-white/20 text-white hover:bg-white/10'
+                  : 'border border-white/30 text-white hover:bg-white/20'
+              }`}
+            >
+              Advanced Search
             </button>
             <button 
               onClick={() => setCurrentView('stats')}
