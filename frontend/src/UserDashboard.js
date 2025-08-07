@@ -566,6 +566,14 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
           />
         </main>
       )}
+
+      {/* Content Detail Modal */}
+      {selectedContent && (
+        <ContentDetailModal
+          content={selectedContent}
+          onClose={closeContentModal}
+        />
+      )}
     </div>
   );
 };
