@@ -748,6 +748,7 @@ function App() {
 
   // User Authentication Modal
   if (showUserAuth) {
+    console.log('Rendering UserAuth modal, isLoginMode:', isLoginMode);
     return (
       <UserAuth 
         onLogin={handleLogin} 
