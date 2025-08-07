@@ -657,7 +657,7 @@ class BackendTester:
     
     def run_all_tests(self):
         """Run all backend tests"""
-        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide")
+        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 3 Public Content Discovery")
         print(f"Backend URL: {self.base_url}")
         print("=" * 80)
         
@@ -667,19 +667,43 @@ class BackendTester:
         self.test_content_pagination()
         self.test_individual_content()
         self.test_invalid_content_id()
-        self.test_trending_endpoint()
+        
+        # Day 3 Public Content Discovery - Advanced Search Tests
+        print("\n🔍 DAY 3 ADVANCED SEARCH TESTS")
+        print("-" * 50)
+        self.test_advanced_search_endpoint()
+        
+        # Day 3 Public Content Discovery - Featured Content Tests  
+        print("\n⭐ DAY 3 FEATURED CONTENT TESTS")
+        print("-" * 50)
+        self.test_featured_content_endpoint()
+        
+        # Filter option endpoints
+        print("\n📋 FILTER OPTION ENDPOINTS")
+        print("-" * 50)
         self.test_countries_endpoint()
         self.test_genres_endpoint()
         self.test_content_types_endpoint()
         
-        # Search and filtering tests
+        # Legacy endpoints
+        print("\n🔄 LEGACY ENDPOINTS")
+        print("-" * 50)
+        self.test_trending_endpoint()
+        
+        # Search and filtering tests (original)
+        print("\n🔎 ORIGINAL SEARCH & FILTER TESTS")
+        print("-" * 50)
         self.test_content_search()
         self.test_content_filters()
         
         # Database integration tests
+        print("\n💾 DATABASE INTEGRATION TESTS")
+        print("-" * 50)
         self.test_database_integration()
         
         # Content creation test
+        print("\n➕ CONTENT CREATION TEST")
+        print("-" * 50)
         self.test_create_content()
         
         # Summary
