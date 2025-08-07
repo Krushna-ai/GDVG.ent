@@ -109,6 +109,28 @@ class UserProfile(BaseModel):
     joined_date: datetime
     is_verified: bool
 
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+class UserSettings(BaseModel):
+    theme: str = "dark"
+    language: str = "en"
+    notifications: dict = Field(default_factory=lambda: {
+        "email": True,
+        "push": True,
+        "social": True,
+        "recommendations": True
+    })
+    privacy: dict = Field(default_factory=lambda: {
+        "profile_public": True,
+        "activity_public": True,
+        "lists_public": True
+    })
+
 class AdminLogin(BaseModel):
     username: str
     password: str
