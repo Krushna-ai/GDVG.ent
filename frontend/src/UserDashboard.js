@@ -84,6 +84,17 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
               Discover
             </button>
             <button 
+              onClick={() => setCurrentView('watchlist')}
+              className={`transition-colors ${
+                currentView === 'watchlist'
+                  ? 'text-red-400'
+                  : darkTheme
+                  ? 'text-gray-400 hover:text-red-400'
+                  : 'text-gray-600 hover:text-red-600'
+              }`}>
+              My List
+            </button>
+            <button 
               onClick={() => setCurrentView('stats')}
               className={`transition-colors ${
                 currentView === 'stats'
