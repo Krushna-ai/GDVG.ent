@@ -1772,6 +1772,7 @@ async def get_user_following(
         }},
         {"$unwind": "$following"},
         {"$project": {
+            "_id": 0,
             "username": "$following.username",
             "avatar_url": "$following.avatar_url", 
             "is_verified": "$following.is_verified",
