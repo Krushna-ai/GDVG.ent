@@ -314,22 +314,44 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
       darkTheme ? 'bg-black' : 'bg-gray-50'
     }`}>
       <UserHeader />
-      <WelcomeSection />
       
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-8">
-          <h2 className={`text-3xl font-bold mb-2 ${
-            darkTheme ? 'text-white' : 'text-gray-900'
-          }`}>
-            Trending Now
-          </h2>
-          <p className={`${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-            Popular content across all regions and genres
-          </p>
-        </div>
+      {currentView === 'home' && (
+        <>
+          <WelcomeSection />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div className="mb-8">
+              <h2 className={`text-3xl font-bold mb-2 ${
+                darkTheme ? 'text-white' : 'text-gray-900'
+              }`}>
+                Trending Now
+              </h2>
+              <p className={`${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
+                Popular content across all regions and genres
+              </p>
+            </div>
+            <ContentGrid />
+          </main>
+        </>
+      )}
 
-        <ContentGrid />
-      </main>
+      {currentView === 'profile' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <UserProfile 
+            darkTheme={darkTheme} 
+            currentUser={userProfile} 
+            onProfileUpdate={handleProfileUpdate}
+          />
+        </main>
+      )}
+
+      {currentView === 'stats' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <UserStats 
+            darkTheme={darkTheme} 
+            currentUser={userProfile}
+          />
+        </main>
+      )}
     </div>
   );
 };
