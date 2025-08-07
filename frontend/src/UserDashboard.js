@@ -394,7 +394,7 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
 
               {/* Streaming Platforms */}
               {content.streaming_platforms && content.streaming_platforms.length > 0 && (
-                <div>
+                <div className="mb-6">
                   <h3 className={`text-lg font-semibold mb-3 ${
                     darkTheme ? 'text-white' : 'text-gray-900'
                   }`}>
@@ -412,6 +412,15 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
                   </div>
                 </div>
               )}
+
+              {/* Watchlist Button */}
+              <div className="flex items-center justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                <WatchlistButton 
+                  content={content} 
+                  darkTheme={darkTheme} 
+                  size="lg" 
+                />
+              </div>
             </div>
           </div>
         </div>
