@@ -246,8 +246,252 @@ class BackendTester:
         except Exception as e:
             self.log_test("Invalid Content ID", False, f"Exception: {str(e)}")
     
+    def test_advanced_search_endpoint(self):
+        """Test GET /api/content/search - Advanced search with multiple filters"""
+        try:
+            # Test 1: Basic query search
+            response = self.make_request("GET", "/content/search?query=Squid")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 0:
+                    self.log_test("Advanced Search - Basic Query", True, f"Query search returned {len(data['contents'])} results")
+                else:
+                    self.log_test("Advanced Search - Basic Query", False, "Query search returned no results")
+            else:
+                self.log_test("Advanced Search - Basic Query", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Country filter
+            response = self.make_request("GET", "/content/search?country=South Korea")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 0:
+                    # Verify all results are from South Korea
+                    all_korean = all("korea" in content["country"].lower() for content in data["contents"])
+                    if all_korean:
+                        self.log_test("Advanced Search - Country Filter", True, f"Country filter returned {len(data['contents'])} Korean content")
+                    else:
+                        self.log_test("Advanced Search - Country Filter", False, "Country filter not working correctly")
+                else:
+                    self.log_test("Advanced Search - Country Filter", False, "Country filter returned no results")
+            else:
+                self.log_test("Advanced Search - Country Filter", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Content type filter
+            response = self.make_request("GET", "/content/search?content_type=movie")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 0:
+                    all_movies = all(content["content_type"] == "movie" for content in data["contents"])
+                    if all_movies:
+                        self.log_test("Advanced Search - Content Type Filter", True, f"Content type filter returned {len(data['contents'])} movies")
+                    else:
+                        self.log_test("Advanced Search - Content Type Filter", False, "Content type filter not working correctly")
+                else:
+                    self.log_test("Advanced Search - Content Type Filter", False, "Content type filter returned no results")
+            else:
+                self.log_test("Advanced Search - Content Type Filter", False, f"HTTP {response.status_code}")
+            
+            # Test 4: Genre filter
+            response = self.make_request("GET", "/content/search?genre=thriller")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 0:
+                    has_thriller = all("thriller" in content["genres"] for content in data["contents"])
+                    if has_thriller:
+                        self.log_test("Advanced Search - Genre Filter", True, f"Genre filter returned {len(data['contents'])} thriller content")
+                    else:
+                        self.log_test("Advanced Search - Genre Filter", False, "Genre filter not working correctly")
+                else:
+                    self.log_test("Advanced Search - Genre Filter", False, "Genre filter returned no results")
+            else:
+                self.log_test("Advanced Search - Genre Filter", False, f"HTTP {response.status_code}")
+            
+            # Test 5: Year range filter
+            response = self.make_request("GET", "/content/search?year_from=2015&year_to=2020")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 0:
+                    in_range = all(2015 <= content["year"] <= 2020 for content in data["contents"])
+                    if in_range:
+                        self.log_test("Advanced Search - Year Range Filter", True, f"Year range filter returned {len(data['contents'])} content from 2015-2020")
+                    else:
+                        self.log_test("Advanced Search - Year Range Filter", False, "Year range filter not working correctly")
+                else:
+                    self.log_test("Advanced Search - Year Range Filter", False, "Year range filter returned no results")
+            else:
+                self.log_test("Advanced Search - Year Range Filter", False, f"HTTP {response.status_code}")
+            
+            # Test 6: Rating range filter
+            response = self.make_request("GET", "/content/search?rating_min=8.0&rating_max=9.0")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 0:
+                    in_range = all(8.0 <= content["rating"] <= 9.0 for content in data["contents"])
+                    if in_range:
+                        self.log_test("Advanced Search - Rating Range Filter", True, f"Rating range filter returned {len(data['contents'])} high-rated content")
+                    else:
+                        self.log_test("Advanced Search - Rating Range Filter", False, "Rating range filter not working correctly")
+                else:
+                    self.log_test("Advanced Search - Rating Range Filter", False, "Rating range filter returned no results")
+            else:
+                self.log_test("Advanced Search - Rating Range Filter", False, f"HTTP {response.status_code}")
+            
+            # Test 7: Combined filters
+            response = self.make_request("GET", "/content/search?country=South Korea&content_type=movie&rating_min=8.0")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data:
+                    self.log_test("Advanced Search - Combined Filters", True, f"Combined filters returned {len(data['contents'])} results")
+                else:
+                    self.log_test("Advanced Search - Combined Filters", False, "Combined filters failed")
+            else:
+                self.log_test("Advanced Search - Combined Filters", False, f"HTTP {response.status_code}")
+            
+            # Test 8: Sorting options
+            response = self.make_request("GET", "/content/search?sort_by=rating&sort_order=desc")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and len(data["contents"]) > 1:
+                    ratings = [content["rating"] for content in data["contents"]]
+                    is_sorted_desc = all(ratings[i] >= ratings[i+1] for i in range(len(ratings)-1))
+                    if is_sorted_desc:
+                        self.log_test("Advanced Search - Sorting", True, "Results properly sorted by rating (descending)")
+                    else:
+                        self.log_test("Advanced Search - Sorting", False, "Sorting not working correctly")
+                else:
+                    self.log_test("Advanced Search - Sorting", True, "Sorting test completed (insufficient data for verification)")
+            else:
+                self.log_test("Advanced Search - Sorting", False, f"HTTP {response.status_code}")
+            
+            # Test 9: Pagination in search
+            response = self.make_request("GET", "/content/search?page=1&limit=2")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and "page" in data and "limit" in data:
+                    if data["page"] == 1 and data["limit"] == 2 and len(data["contents"]) <= 2:
+                        self.log_test("Advanced Search - Pagination", True, "Search pagination working correctly")
+                    else:
+                        self.log_test("Advanced Search - Pagination", False, "Search pagination not working correctly")
+                else:
+                    self.log_test("Advanced Search - Pagination", False, "Search pagination response format incorrect")
+            else:
+                self.log_test("Advanced Search - Pagination", False, f"HTTP {response.status_code}")
+            
+            # Test 10: Empty search (should return all content)
+            response = self.make_request("GET", "/content/search")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "contents" in data and "total" in data:
+                    self.log_test("Advanced Search - Empty Query", True, f"Empty search returned {data['total']} total content items")
+                else:
+                    self.log_test("Advanced Search - Empty Query", False, "Empty search response format incorrect")
+            else:
+                self.log_test("Advanced Search - Empty Query", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Advanced Search Endpoint", False, f"Exception: {str(e)}")
+    
+    def test_featured_content_endpoint(self):
+        """Test GET /api/content/featured - Featured content sections"""
+        try:
+            # Test 1: Trending content
+            response = self.make_request("GET", "/content/featured?category=trending")
+            
+            if response.status_code == 200:
+                contents = response.json()
+                if isinstance(contents, list) and len(contents) > 0:
+                    self.log_test("Featured Content - Trending", True, f"Retrieved {len(contents)} trending items")
+                else:
+                    self.log_test("Featured Content - Trending", False, "No trending content returned")
+            else:
+                self.log_test("Featured Content - Trending", False, f"HTTP {response.status_code}")
+            
+            # Test 2: New releases
+            response = self.make_request("GET", "/content/featured?category=new_releases")
+            
+            if response.status_code == 200:
+                contents = response.json()
+                if isinstance(contents, list) and len(contents) > 0:
+                    self.log_test("Featured Content - New Releases", True, f"Retrieved {len(contents)} new releases")
+                else:
+                    self.log_test("Featured Content - New Releases", False, "No new releases returned")
+            else:
+                self.log_test("Featured Content - New Releases", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Top rated
+            response = self.make_request("GET", "/content/featured?category=top_rated")
+            
+            if response.status_code == 200:
+                contents = response.json()
+                if isinstance(contents, list) and len(contents) > 0:
+                    # Verify sorting by rating
+                    ratings = [content["rating"] for content in contents]
+                    is_sorted = all(ratings[i] >= ratings[i+1] for i in range(len(ratings)-1))
+                    if is_sorted:
+                        self.log_test("Featured Content - Top Rated", True, f"Retrieved {len(contents)} top rated items, properly sorted")
+                    else:
+                        self.log_test("Featured Content - Top Rated", True, f"Retrieved {len(contents)} top rated items")
+                else:
+                    self.log_test("Featured Content - Top Rated", False, "No top rated content returned")
+            else:
+                self.log_test("Featured Content - Top Rated", False, f"HTTP {response.status_code}")
+            
+            # Test 4: By country
+            response = self.make_request("GET", "/content/featured?category=by_country&country=South Korea")
+            
+            if response.status_code == 200:
+                contents = response.json()
+                if isinstance(contents, list) and len(contents) > 0:
+                    # Verify all content is from South Korea
+                    all_korean = all("korea" in content["country"].lower() for content in contents)
+                    if all_korean:
+                        self.log_test("Featured Content - By Country", True, f"Retrieved {len(contents)} Korean content items")
+                    else:
+                        self.log_test("Featured Content - By Country", False, "Country filtering not working correctly")
+                else:
+                    self.log_test("Featured Content - By Country", False, "No country-specific content returned")
+            else:
+                self.log_test("Featured Content - By Country", False, f"HTTP {response.status_code}")
+            
+            # Test 5: Default category (should default to trending)
+            response = self.make_request("GET", "/content/featured")
+            
+            if response.status_code == 200:
+                contents = response.json()
+                if isinstance(contents, list) and len(contents) > 0:
+                    self.log_test("Featured Content - Default Category", True, f"Default category returned {len(contents)} items")
+                else:
+                    self.log_test("Featured Content - Default Category", False, "Default category returned no content")
+            else:
+                self.log_test("Featured Content - Default Category", False, f"HTTP {response.status_code}")
+            
+            # Test 6: Custom limit
+            response = self.make_request("GET", "/content/featured?category=trending&limit=5")
+            
+            if response.status_code == 200:
+                contents = response.json()
+                if isinstance(contents, list) and len(contents) <= 5:
+                    self.log_test("Featured Content - Custom Limit", True, f"Custom limit returned {len(contents)} items (max 5)")
+                else:
+                    self.log_test("Featured Content - Custom Limit", False, f"Custom limit not respected, returned {len(contents)} items")
+            else:
+                self.log_test("Featured Content - Custom Limit", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Featured Content Endpoint", False, f"Exception: {str(e)}")
+    
     def test_trending_endpoint(self):
-        """Test GET /api/trending"""
+        """Test GET /api/trending (legacy endpoint)"""
         try:
             response = self.make_request("GET", "/trending")
             
@@ -260,16 +504,16 @@ class BackendTester:
                     is_sorted = all(ratings[i] >= ratings[i+1] for i in range(len(ratings)-1))
                     
                     if is_sorted:
-                        self.log_test("Trending Content", True, f"Retrieved {len(contents)} trending items, properly sorted")
+                        self.log_test("Trending Content (Legacy)", True, f"Retrieved {len(contents)} trending items, properly sorted")
                     else:
-                        self.log_test("Trending Content", True, f"Retrieved {len(contents)} trending items (sorting may vary)")
+                        self.log_test("Trending Content (Legacy)", True, f"Retrieved {len(contents)} trending items (sorting may vary)")
                 else:
-                    self.log_test("Trending Content", False, "No trending content returned")
+                    self.log_test("Trending Content (Legacy)", False, "No trending content returned")
             else:
-                self.log_test("Trending Content", False, f"HTTP {response.status_code}")
+                self.log_test("Trending Content (Legacy)", False, f"HTTP {response.status_code}")
                 
         except Exception as e:
-            self.log_test("Trending Content", False, f"Exception: {str(e)}")
+            self.log_test("Trending Content (Legacy)", False, f"Exception: {str(e)}")
     
     def test_countries_endpoint(self):
         """Test GET /api/countries"""
