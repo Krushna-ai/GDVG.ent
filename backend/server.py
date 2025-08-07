@@ -546,6 +546,138 @@ async def get_user_profile(username: str):
         is_verified=user_obj.is_verified
     )
 
+@api_router.put("/auth/profile", response_model=UserProfile)
+async def update_user_profile(
+    profile_data: UserUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user profile"""
+    
+    # Build update data
+    update_data = {}
+    if profile_data.first_name is not None:
+        update_data["first_name"] = profile_data.first_name.strip()
+    if profile_data.last_name is not None:
+        update_data["last_name"] = profile_data.last_name.strip()
+    if profile_data.bio is not None:
+        update_data["bio"] = profile_data.bio.strip()
+    if profile_data.location is not None:
+        update_data["location"] = profile_data.location.strip()
+    if profile_data.avatar_url is not None:
+        update_data["avatar_url"] = profile_data.avatar_url
+    
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        
+        # Update in database
+        await db.users.update_one(
+            {"id": current_user.id},
+            {"$set": update_data}
+        )
+    
+    # Fetch updated user
+    updated_user = await db.users.find_one({"id": current_user.id})
+    if '_id' in updated_user:
+        del updated_user['_id']
+    
+    user_obj = User(**updated_user)
+    return UserProfile(
+        id=user_obj.id,
+        email=user_obj.email,
+        username=user_obj.username,
+        first_name=user_obj.first_name,
+        last_name=user_obj.last_name,
+        avatar_url=user_obj.avatar_url,
+        bio=user_obj.bio,
+        location=user_obj.location,
+        joined_date=user_obj.joined_date,
+        is_verified=user_obj.is_verified
+    )
+
+@api_router.post("/auth/avatar", response_model=UserProfile)
+async def upload_avatar(
+    avatar_file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload user avatar"""
+    
+    # Validate file type
+    if not avatar_file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    # Read and convert to base64
+    file_content = await avatar_file.read()
+    if len(file_content) > 5 * 1024 * 1024:  # 5MB limit
+        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
+    
+    # Convert to base64
+    import base64
+    avatar_base64 = f"data:{avatar_file.content_type};base64,{base64.b64encode(file_content).decode('utf-8')}"
+    
+    # Update user avatar
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {"avatar_url": avatar_base64, "updated_at": datetime.utcnow()}}
+    )
+    
+    # Return updated profile
+    updated_user = await db.users.find_one({"id": current_user.id})
+    if '_id' in updated_user:
+        del updated_user['_id']
+    
+    user_obj = User(**updated_user)
+    return UserProfile(
+        id=user_obj.id,
+        email=user_obj.email,
+        username=user_obj.username,
+        first_name=user_obj.first_name,
+        last_name=user_obj.last_name,
+        avatar_url=user_obj.avatar_url,
+        bio=user_obj.bio,
+        location=user_obj.location,
+        joined_date=user_obj.joined_date,
+        is_verified=user_obj.is_verified
+    )
+
+@api_router.get("/auth/settings", response_model=UserSettings)
+async def get_user_settings(current_user: User = Depends(get_current_user)):
+    """Get user settings"""
+    settings = current_user.preferences
+    
+    return UserSettings(
+        theme=settings.get("theme", "dark"),
+        language=settings.get("language", "en"),
+        notifications=settings.get("notifications", {
+            "email": True,
+            "push": True,
+            "social": True,
+            "recommendations": True
+        }),
+        privacy=settings.get("privacy", {
+            "profile_public": True,
+            "activity_public": True,
+            "lists_public": True
+        })
+    )
+
+@api_router.put("/auth/settings", response_model=UserSettings)
+async def update_user_settings(
+    settings_data: UserSettings,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user settings"""
+    
+    # Update user preferences
+    await db.users.update_one(
+        {"id": current_user.id},
+        {"$set": {
+            "preferences": settings_data.dict(),
+            "updated_at": datetime.utcnow()
+        }}
+    )
+    
+    return settings_data
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
