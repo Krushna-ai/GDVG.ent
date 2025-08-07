@@ -1916,6 +1916,580 @@ async def create_activity(user_id: str, activity_type: str, content_id: str = No
     
     await db.activity_feed.insert_one(activity.dict())
 
+# Day 8-9: Enhanced Social Interactions - Models  
+class ReviewLike(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    review_id: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ReviewComment(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    review_id: str
+    comment_text: str
+    parent_comment_id: Optional[str] = None  # For nested comments
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ReviewCommentCreate(BaseModel):
+    review_id: str
+    comment_text: str
+    parent_comment_id: Optional[str] = None
+
+# Enhanced Social Interactions API Endpoints
+@api_router.post("/reviews/{review_id}/like")
+async def like_review(
+    review_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Like or unlike a review"""
+    
+    # Check if review exists
+    review = await db.reviews.find_one({"id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # Check if already liked
+    existing_like = await db.review_likes.find_one({
+        "user_id": current_user.id,
+        "review_id": review_id
+    })
+    
+    if existing_like:
+        # Unlike - remove like
+        await db.review_likes.delete_one({
+            "user_id": current_user.id,
+            "review_id": review_id
+        })
+        
+        # Update review like count
+        await db.reviews.update_one(
+            {"id": review_id},
+            {"$inc": {"like_count": -1}}
+        )
+        
+        return {"message": "Review unliked successfully", "liked": False}
+    else:
+        # Like - add like
+        like = ReviewLike(
+            user_id=current_user.id,
+            review_id=review_id
+        )
+        await db.review_likes.insert_one(like.dict())
+        
+        # Update review like count
+        await db.reviews.update_one(
+            {"id": review_id},
+            {"$inc": {"like_count": 1}}
+        )
+        
+        # Create activity feed entry (if not user's own review)
+        if review["user_id"] != current_user.id:
+            await create_activity(
+                current_user.id,
+                "liked_review",
+                review.get("content_id"),
+                {"review_id": review_id, "review_author": review["user_id"]}
+            )
+        
+        return {"message": "Review liked successfully", "liked": True}
+
+@api_router.get("/reviews/{review_id}/likes")
+async def get_review_likes(
+    review_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Get users who liked a review"""
+    skip = (page - 1) * limit
+    
+    # Check if review exists
+    review = await db.reviews.find_one({"id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # Get likes with user info
+    likes = await db.review_likes.aggregate([
+        {"$match": {"review_id": review_id}},
+        {"$lookup": {
+            "from": "users",
+            "localField": "user_id",
+            "foreignField": "id",
+            "as": "user"
+        }},
+        {"$unwind": "$user"},
+        {"$project": {
+            "_id": 0,
+            "user": {
+                "username": "$user.username",
+                "avatar_url": "$user.avatar_url",
+                "is_verified": "$user.is_verified"
+            },
+            "liked_at": "$created_at"
+        }},
+        {"$sort": {"liked_at": -1}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ]).to_list(limit)
+    
+    total = await db.review_likes.count_documents({"review_id": review_id})
+    
+    return {
+        "likes": likes,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.post("/reviews/{review_id}/comments", response_model=dict)
+async def add_review_comment(
+    review_id: str,
+    comment_data: ReviewCommentCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Add a comment to a review"""
+    
+    # Check if review exists
+    review = await db.reviews.find_one({"id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # If replying to a comment, check if parent exists
+    if comment_data.parent_comment_id:
+        parent_comment = await db.review_comments.find_one({"id": comment_data.parent_comment_id})
+        if not parent_comment:
+            raise HTTPException(status_code=404, detail="Parent comment not found")
+    
+    # Create comment
+    comment = ReviewComment(
+        user_id=current_user.id,
+        **comment_data.dict()
+    )
+    
+    await db.review_comments.insert_one(comment.dict())
+    
+    # Update review comment count
+    await db.reviews.update_one(
+        {"id": review_id},
+        {"$inc": {"comment_count": 1}}
+    )
+    
+    # Create activity feed entry (if not user's own review)
+    if review["user_id"] != current_user.id:
+        await create_activity(
+            current_user.id,
+            "commented_review",
+            review.get("content_id"),
+            {"review_id": review_id, "review_author": review["user_id"]}
+        )
+    
+    return {"message": "Comment added successfully", "id": comment.id}
+
+@api_router.get("/reviews/{review_id}/comments")
+async def get_review_comments(
+    review_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100)
+):
+    """Get comments for a review"""
+    skip = (page - 1) * limit
+    
+    # Check if review exists
+    review = await db.reviews.find_one({"id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # Get comments with user info, organized by parent/child structure
+    comments = await db.review_comments.aggregate([
+        {"$match": {"review_id": review_id}},
+        {"$lookup": {
+            "from": "users",
+            "localField": "user_id",
+            "foreignField": "id",
+            "as": "user"
+        }},
+        {"$unwind": "$user"},
+        {"$project": {
+            "_id": 0,
+            "id": 1,
+            "comment_text": 1,
+            "parent_comment_id": 1,
+            "created_at": 1,
+            "updated_at": 1,
+            "user": {
+                "username": "$user.username",
+                "avatar_url": "$user.avatar_url",
+                "is_verified": "$user.is_verified"
+            }
+        }},
+        {"$sort": {"created_at": 1}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ]).to_list(limit)
+    
+    total = await db.review_comments.count_documents({"review_id": review_id})
+    
+    # Organize comments into threads (parent comments with replies)
+    comment_threads = []
+    parent_comments = [c for c in comments if not c.get("parent_comment_id")]
+    
+    for parent in parent_comments:
+        replies = [c for c in comments if c.get("parent_comment_id") == parent["id"]]
+        comment_threads.append({
+            "comment": parent,
+            "replies": replies
+        })
+    
+    return {
+        "comment_threads": comment_threads,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.put("/comments/{comment_id}")
+async def update_comment(
+    comment_id: str,
+    comment_text: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user's own comment"""
+    
+    # Find comment and verify ownership
+    comment = await db.review_comments.find_one({
+        "id": comment_id,
+        "user_id": current_user.id
+    })
+    
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found or not owned by user")
+    
+    # Update comment
+    await db.review_comments.update_one(
+        {"id": comment_id, "user_id": current_user.id},
+        {"$set": {
+            "comment_text": comment_text,
+            "updated_at": datetime.utcnow()
+        }}
+    )
+    
+    return {"message": "Comment updated successfully"}
+
+@api_router.delete("/comments/{comment_id}")
+async def delete_comment(
+    comment_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete user's own comment"""
+    
+    # Find comment and verify ownership
+    comment = await db.review_comments.find_one({
+        "id": comment_id,
+        "user_id": current_user.id
+    })
+    
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found or not owned by user")
+    
+    # Delete comment and all replies
+    await db.review_comments.delete_many({
+        "$or": [
+            {"id": comment_id},
+            {"parent_comment_id": comment_id}
+        ]
+    })
+    
+    # Update review comment count
+    deleted_count = 1 + await db.review_comments.count_documents({"parent_comment_id": comment_id})
+    await db.reviews.update_one(
+        {"id": comment["review_id"]},
+        {"$inc": {"comment_count": -deleted_count}}
+    )
+    
+    return {"message": "Comment and replies deleted successfully"}
+
+@api_router.get("/social/notifications")
+async def get_user_notifications(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's social notifications (likes, comments, follows, etc.)"""
+    skip = (page - 1) * limit
+    
+    # Get activities where user is mentioned or their content is interacted with
+    notifications = []
+    
+    # 1. New followers
+    new_followers = await db.user_follows.aggregate([
+        {"$match": {"following_id": current_user.id}},
+        {"$lookup": {
+            "from": "users",
+            "localField": "follower_id",
+            "foreignField": "id",
+            "as": "follower"
+        }},
+        {"$unwind": "$follower"},
+        {"$project": {
+            "_id": 0,
+            "type": "new_follower",
+            "user": {
+                "username": "$follower.username",
+                "avatar_url": "$follower.avatar_url",
+                "is_verified": "$follower.is_verified"
+            },
+            "created_at": "$created_at",
+            "message": {"$concat": ["$follower.username", " started following you"]}
+        }},
+        {"$sort": {"created_at": -1}},
+        {"$limit": 10}
+    ]).to_list(10)
+    
+    notifications.extend(new_followers)
+    
+    # 2. Review likes
+    review_likes = await db.reviews.aggregate([
+        {"$match": {"user_id": current_user.id}},
+        {"$lookup": {
+            "from": "review_likes",
+            "localField": "id",
+            "foreignField": "review_id",
+            "as": "likes"
+        }},
+        {"$unwind": "$likes"},
+        {"$lookup": {
+            "from": "users",
+            "localField": "likes.user_id",
+            "foreignField": "id",
+            "as": "liker"
+        }},
+        {"$unwind": "$liker"},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$project": {
+            "_id": 0,
+            "type": "review_liked",
+            "user": {
+                "username": "$liker.username",
+                "avatar_url": "$liker.avatar_url",
+                "is_verified": "$liker.is_verified"
+            },
+            "content": {
+                "title": "$content.title",
+                "poster_url": "$content.poster_url"
+            },
+            "created_at": "$likes.created_at",
+            "message": {"$concat": ["$liker.username", " liked your review of ", "$content.title"]}
+        }},
+        {"$sort": {"created_at": -1}},
+        {"$limit": 10}
+    ]).to_list(10)
+    
+    notifications.extend(review_likes)
+    
+    # 3. Review comments
+    review_comments = await db.reviews.aggregate([
+        {"$match": {"user_id": current_user.id}},
+        {"$lookup": {
+            "from": "review_comments",
+            "localField": "id",
+            "foreignField": "review_id",
+            "as": "comments"
+        }},
+        {"$unwind": "$comments"},
+        {"$match": {"comments.user_id": {"$ne": current_user.id}}},  # Exclude self-comments
+        {"$lookup": {
+            "from": "users",
+            "localField": "comments.user_id",
+            "foreignField": "id",
+            "as": "commenter"
+        }},
+        {"$unwind": "$commenter"},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$project": {
+            "_id": 0,
+            "type": "review_commented",
+            "user": {
+                "username": "$commenter.username",
+                "avatar_url": "$commenter.avatar_url",
+                "is_verified": "$commenter.is_verified"
+            },
+            "content": {
+                "title": "$content.title",
+                "poster_url": "$content.poster_url"
+            },
+            "created_at": "$comments.created_at",
+            "message": {"$concat": ["$commenter.username", " commented on your review of ", "$content.title"]}
+        }},
+        {"$sort": {"created_at": -1}},
+        {"$limit": 10}
+    ]).to_list(10)
+    
+    notifications.extend(review_comments)
+    
+    # Sort all notifications by date and paginate
+    all_notifications = sorted(notifications, key=lambda x: x["created_at"], reverse=True)
+    paginated = all_notifications[skip:skip+limit]
+    
+    return {
+        "notifications": paginated,
+        "total": len(all_notifications),
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.get("/social/trending-users")
+async def get_trending_users(limit: int = Query(10, ge=1, le=50)):
+    """Get trending users based on recent activity and followers"""
+    
+    # Get users with most followers and recent activity
+    trending = await db.users.aggregate([
+        {"$lookup": {
+            "from": "user_follows",
+            "localField": "id",
+            "foreignField": "following_id",
+            "as": "followers"
+        }},
+        {"$lookup": {
+            "from": "reviews",
+            "localField": "id",
+            "foreignField": "user_id",
+            "as": "reviews"
+        }},
+        {"$lookup": {
+            "from": "activity_feed",
+            "let": {"userId": "$id"},
+            "pipeline": [
+                {"$match": {
+                    "$expr": {"$eq": ["$user_id", "$$userId"]},
+                    "created_at": {"$gte": datetime.utcnow() - timedelta(days=7)}
+                }}
+            ],
+            "as": "recent_activities"
+        }},
+        {"$project": {
+            "_id": 0,
+            "username": 1,
+            "avatar_url": 1,
+            "is_verified": 1,
+            "followers_count": {"$size": "$followers"},
+            "reviews_count": {"$size": "$reviews"},
+            "recent_activities_count": {"$size": "$recent_activities"},
+            "trend_score": {
+                "$add": [
+                    {"$multiply": [{"$size": "$followers"}, 2]},
+                    {"$size": "$reviews"},
+                    {"$multiply": [{"$size": "$recent_activities"}, 3]}
+                ]
+            }
+        }},
+        {"$sort": {"trend_score": -1, "followers_count": -1}},
+        {"$limit": limit}
+    ]).to_list(limit)
+    
+    return {"trending_users": trending}
+
+@api_router.get("/social/user-interactions/{username}")
+async def get_user_interactions(
+    username: str,
+    interaction_type: str = Query("all", regex="^(all|likes|comments|follows)$"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50)
+):
+    """Get user's social interactions (their likes, comments, follows)"""
+    skip = (page - 1) * limit
+    
+    # Find user
+    user = await db.users.find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    interactions = []
+    
+    if interaction_type in ["all", "likes"]:
+        # Get review likes by user
+        likes = await db.review_likes.aggregate([
+            {"$match": {"user_id": user["id"]}},
+            {"$lookup": {
+                "from": "reviews",
+                "localField": "review_id",
+                "foreignField": "id",
+                "as": "review"
+            }},
+            {"$unwind": "$review"},
+            {"$lookup": {
+                "from": "content",
+                "localField": "review.content_id",
+                "foreignField": "id",
+                "as": "content"
+            }},
+            {"$unwind": "$content"},
+            {"$project": {
+                "_id": 0,
+                "type": "like",
+                "created_at": "$created_at",
+                "content": {
+                    "title": "$content.title",
+                    "poster_url": "$content.poster_url"
+                },
+                "review_rating": "$review.rating"
+            }},
+            {"$sort": {"created_at": -1}},
+            {"$limit": 10}
+        ]).to_list(10)
+        
+        interactions.extend(likes)
+    
+    if interaction_type in ["all", "follows"]:
+        # Get user follows
+        follows = await db.user_follows.aggregate([
+            {"$match": {"follower_id": user["id"]}},
+            {"$lookup": {
+                "from": "users",
+                "localField": "following_id",
+                "foreignField": "id",
+                "as": "following"
+            }},
+            {"$unwind": "$following"},
+            {"$project": {
+                "_id": 0,
+                "type": "follow",
+                "created_at": "$created_at",
+                "followed_user": {
+                    "username": "$following.username",
+                    "avatar_url": "$following.avatar_url",
+                    "is_verified": "$following.is_verified"
+                }
+            }},
+            {"$sort": {"created_at": -1}},
+            {"$limit": 10}
+        ]).to_list(10)
+        
+        interactions.extend(follows)
+    
+    # Sort and paginate
+    all_interactions = sorted(interactions, key=lambda x: x["created_at"], reverse=True)
+    paginated = all_interactions[skip:skip+limit]
+    
+    return {
+        "interactions": paginated,
+        "total": len(all_interactions),
+        "page": page,
+        "limit": limit
+    }
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
