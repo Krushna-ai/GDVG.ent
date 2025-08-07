@@ -39,6 +39,13 @@ class BackendTester:
     def make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Make HTTP request with error handling"""
         url = f"{self.base_url}{endpoint}"
+        
+        # Add authorization header if token is available
+        if self.auth_token and 'headers' not in kwargs:
+            kwargs['headers'] = {}
+        if self.auth_token:
+            kwargs['headers']['Authorization'] = f"Bearer {self.auth_token}"
+            
         try:
             response = requests.request(method, url, timeout=30, **kwargs)
             return response
