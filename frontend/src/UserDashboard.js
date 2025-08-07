@@ -539,10 +539,15 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
 
       {currentView === 'social' && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <SocialFeatures 
-            darkTheme={darkTheme} 
-            currentUser={userProfile}
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <SocialFeatures 
+              darkTheme={darkTheme} 
+              currentUser={userProfile}
+            />
+            <SocialInteractions 
+              darkTheme={darkTheme}
+            />
+          </div>
         </main>
       )}
 
