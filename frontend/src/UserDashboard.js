@@ -34,17 +34,6 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
     }
   };
 
-  const fetchTrendingContent = async () => {
-    try {
-      const response = await axios.get(`${API}/trending?limit=8`);
-      setContents(response.data);
-    } catch (error) {
-      console.error('Error fetching trending content:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('user_token');
     onLogout();
