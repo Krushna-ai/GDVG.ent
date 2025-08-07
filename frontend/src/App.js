@@ -635,6 +635,10 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userType, setUserType] = useState(null); // 'admin' or 'user'
+  const [currentUser, setCurrentUser] = useState(null);
+  const [showUserAuth, setShowUserAuth] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true);
 
   useEffect(() => {
     document.title = 'GDVG - Global Drama Verse Guide';
@@ -644,32 +648,95 @@ function App() {
       setIsAdminMode(true);
       
       // Check if admin is already authenticated
-      const token = localStorage.getItem('admin_token');
-      if (token) {
+      const adminToken = localStorage.getItem('admin_token');
+      if (adminToken) {
         setIsAuthenticated(true);
+        setUserType('admin');
       }
     } else {
-      fetchContents();
+      // Check if user is authenticated
+      const userToken = localStorage.getItem('user_token');
+      if (userToken) {
+        setIsAuthenticated(true);
+        setUserType('user');
+        fetchUserProfile(userToken);
+      } else {
+        // Show public content for non-authenticated users
+        fetchContents();
+      }
     }
   }, []);
 
-  const handleAdminLogin = (token) => {
-    setIsAuthenticated(true);
+  const fetchUserProfile = async (token) => {
+    try {
+      const response = await axios.get(`${API}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCurrentUser(response.data);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      // Token might be expired, clear it
+      localStorage.removeItem('user_token');
+      setIsAuthenticated(false);
+      setUserType(null);
+      fetchContents();
+    }
   };
 
-  const handleAdminLogout = () => {
+  const handleLogin = (token, type) => {
+    setIsAuthenticated(true);
+    setUserType(type);
+    setShowUserAuth(false);
+    
+    if (type === 'user') {
+      fetchUserProfile(token);
+    }
+  };
+
+  const handleLogout = () => {
     setIsAuthenticated(false);
+    setUserType(null);
+    setCurrentUser(null);
+    localStorage.removeItem('user_token');
     localStorage.removeItem('admin_token');
-    // Redirect to main site
-    window.location.href = '/';
+    
+    if (isAdminMode) {
+      // Redirect to main site
+      window.location.href = '/';
+    } else {
+      fetchContents();
+    }
   };
 
   // Admin Mode
   if (isAdminMode) {
-    if (!isAuthenticated) {
-      return <AdminLogin onLogin={handleAdminLogin} darkTheme={darkTheme} />;
+    if (!isAuthenticated || userType !== 'admin') {
+      return <AdminLogin onLogin={(token) => handleLogin(token, 'admin')} darkTheme={darkTheme} />;
     }
-    return <AdminDashboard darkTheme={darkTheme} onLogout={handleAdminLogout} />;
+    return <AdminDashboard darkTheme={darkTheme} onLogout={handleLogout} />;
+  }
+
+  // User Authentication Modal
+  if (showUserAuth) {
+    return (
+      <UserAuth 
+        onLogin={handleLogin} 
+        darkTheme={darkTheme} 
+        isLogin={isLoginMode}
+        setIsLogin={setIsLoginMode}
+      />
+    );
+  }
+
+  // Authenticated User Dashboard
+  if (isAuthenticated && userType === 'user') {
+    return (
+      <UserDashboard 
+        darkTheme={darkTheme} 
+        onLogout={handleLogout}
+        currentUser={currentUser}
+      />
+    );
   }
 
   const fetchContents = async (search = '') => {
