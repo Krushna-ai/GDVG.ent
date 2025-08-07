@@ -131,7 +131,51 @@ class UserSettings(BaseModel):
         "lists_public": True
     })
 
-# Watchlist Models
+# Rating & Review Models
+class Review(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    content_id: str
+    rating: float = Field(ge=0.0, le=10.0)  # 0-10 rating scale
+    title: Optional[str] = None  # Review title
+    review_text: Optional[str] = None  # Review content
+    contains_spoilers: bool = False
+    helpful_votes: int = 0
+    total_votes: int = 0
+    is_featured: bool = False  # Admin can feature reviews
+    created_date: datetime = Field(default_factory=datetime.utcnow)
+    updated_date: datetime = Field(default_factory=datetime.utcnow)
+
+class ReviewCreate(BaseModel):
+    content_id: str
+    rating: float = Field(ge=0.0, le=10.0)
+    title: Optional[str] = None
+    review_text: Optional[str] = None
+    contains_spoilers: bool = False
+
+class ReviewUpdate(BaseModel):
+    rating: Optional[float] = Field(None, ge=0.0, le=10.0)
+    title: Optional[str] = None
+    review_text: Optional[str] = None
+    contains_spoilers: Optional[bool] = None
+
+class ReviewResponse(BaseModel):
+    review: Review
+    user: dict  # User info (username, avatar)
+    content: dict  # Content info (title, poster)
+
+class ReviewsListResponse(BaseModel):
+    reviews: List[dict]
+    total: int
+    page: int
+    limit: int
+    avg_rating: Optional[float] = None
+
+# Content Models - Add rating info
+class ContentRating(BaseModel):
+    average_rating: float
+    total_reviews: int
+    rating_distribution: dict  # {1: count, 2: count, ...}
 class WatchlistStatus(str, Enum):
     WANT_TO_WATCH = "want_to_watch"
     WATCHING = "watching" 
