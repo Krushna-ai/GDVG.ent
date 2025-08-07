@@ -2356,8 +2356,12 @@ async def get_user_notifications(
     }
 
 @api_router.get("/social/trending-users")
-async def get_trending_users(limit: int = Query(10, ge=1, le=50)):
+async def get_trending_users(
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=50)
+):
     """Get trending users based on recent activity and followers"""
+    skip = (page - 1) * limit
     
     # Get users with most followers and recent activity
     trending = await db.users.aggregate([
@@ -2401,10 +2405,19 @@ async def get_trending_users(limit: int = Query(10, ge=1, le=50)):
             }
         }},
         {"$sort": {"trend_score": -1, "followers_count": -1}},
+        {"$skip": skip},
         {"$limit": limit}
     ]).to_list(limit)
     
-    return {"trending_users": trending}
+    # Get total count for pagination
+    total = await db.users.count_documents({})
+    
+    return {
+        "users": trending,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
 
 @api_router.get("/social/user-interactions/{username}")
 async def get_user_interactions(
