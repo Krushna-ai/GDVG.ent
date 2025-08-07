@@ -966,6 +966,335 @@ async def get_watchlist_stats(current_user: User = Depends(get_current_user)):
         "recent_activity": recent_with_content
     }
 
+# Rating & Review API Endpoints
+@api_router.post("/reviews", response_model=dict)
+async def create_review(
+    review_data: ReviewCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new review for content"""
+    
+    # Check if content exists
+    content = await db.content.find_one({"id": review_data.content_id})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Check if user already reviewed this content
+    existing_review = await db.reviews.find_one({
+        "user_id": current_user.id,
+        "content_id": review_data.content_id
+    })
+    
+    if existing_review:
+        raise HTTPException(status_code=400, detail="You have already reviewed this content")
+    
+    # Create review
+    review = Review(
+        user_id=current_user.id,
+        **review_data.dict()
+    )
+    
+    # Insert into database
+    await db.reviews.insert_one(review.dict())
+    
+    # Update content's average rating
+    await update_content_rating(review_data.content_id)
+    
+    return {"message": "Review created successfully", "id": review.id}
+
+@api_router.get("/reviews", response_model=ReviewsListResponse)
+async def get_reviews(
+    content_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("created_date", regex="^(created_date|rating|helpful_votes)$")
+):
+    """Get reviews with optional filters"""
+    skip = (page - 1) * limit
+    
+    # Build filter query
+    filter_query = {}
+    if content_id:
+        filter_query["content_id"] = content_id
+    if user_id:
+        filter_query["user_id"] = user_id
+    
+    # Get total count
+    total = await db.reviews.count_documents(filter_query)
+    
+    # Get reviews with sorting
+    sort_direction = -1  # Newest first
+    cursor = db.reviews.find(filter_query).sort(sort_by, sort_direction).skip(skip).limit(limit)
+    reviews = await cursor.to_list(length=limit)
+    
+    # Enrich reviews with user and content data
+    enriched_reviews = []
+    for review in reviews:
+        if '_id' in review:
+            del review['_id']
+        
+        # Get user info
+        user = await db.users.find_one({"id": review["user_id"]})
+        user_info = {
+            "username": user["username"],
+            "avatar_url": user.get("avatar_url"),
+            "is_verified": user.get("is_verified", False)
+        } if user else {}
+        
+        # Get content info
+        content = await db.content.find_one({"id": review["content_id"]})
+        content_info = {
+            "title": content["title"],
+            "poster_url": content["poster_url"],
+            "year": content["year"]
+        } if content else {}
+        
+        enriched_reviews.append({
+            **review,
+            "user": user_info,
+            "content": content_info
+        })
+    
+    # Calculate average rating if filtering by content
+    avg_rating = None
+    if content_id:
+        rating_pipeline = [
+            {"$match": {"content_id": content_id}},
+            {"$group": {"_id": None, "avg_rating": {"$avg": "$rating"}}}
+        ]
+        avg_result = await db.reviews.aggregate(rating_pipeline).to_list(1)
+        if avg_result:
+            avg_rating = round(avg_result[0]["avg_rating"], 1)
+    
+    return ReviewsListResponse(
+        reviews=enriched_reviews,
+        total=total,
+        page=page,
+        limit=limit,
+        avg_rating=avg_rating
+    )
+
+@api_router.get("/reviews/{review_id}", response_model=ReviewResponse)
+async def get_review(review_id: str):
+    """Get a specific review by ID"""
+    review = await db.reviews.find_one({"id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    if '_id' in review:
+        del review['_id']
+    
+    # Get user and content info
+    user = await db.users.find_one({"id": review["user_id"]})
+    content = await db.content.find_one({"id": review["content_id"]})
+    
+    user_info = {
+        "username": user["username"],
+        "avatar_url": user.get("avatar_url"),
+        "is_verified": user.get("is_verified", False)
+    } if user else {}
+    
+    content_info = {
+        "title": content["title"],
+        "poster_url": content["poster_url"],
+        "year": content["year"]
+    } if content else {}
+    
+    return ReviewResponse(
+        review=Review(**review),
+        user=user_info,
+        content=content_info
+    )
+
+@api_router.put("/reviews/{review_id}", response_model=dict)
+async def update_review(
+    review_id: str,
+    review_data: ReviewUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user's own review"""
+    
+    # Find existing review
+    existing_review = await db.reviews.find_one({
+        "id": review_id,
+        "user_id": current_user.id
+    })
+    
+    if not existing_review:
+        raise HTTPException(status_code=404, detail="Review not found or not owned by user")
+    
+    # Build update data
+    update_data = {k: v for k, v in review_data.dict().items() if v is not None}
+    update_data["updated_date"] = datetime.utcnow()
+    
+    # Update in database
+    await db.reviews.update_one(
+        {"id": review_id, "user_id": current_user.id},
+        {"$set": update_data}
+    )
+    
+    # Update content's average rating if rating changed
+    if review_data.rating is not None:
+        await update_content_rating(existing_review["content_id"])
+    
+    return {"message": "Review updated successfully"}
+
+@api_router.delete("/reviews/{review_id}")
+async def delete_review(
+    review_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete user's own review"""
+    
+    # Find existing review
+    existing_review = await db.reviews.find_one({
+        "id": review_id,
+        "user_id": current_user.id
+    })
+    
+    if not existing_review:
+        raise HTTPException(status_code=404, detail="Review not found or not owned by user")
+    
+    # Delete review
+    await db.reviews.delete_one({
+        "id": review_id,
+        "user_id": current_user.id
+    })
+    
+    # Update content's average rating
+    await update_content_rating(existing_review["content_id"])
+    
+    return {"message": "Review deleted successfully"}
+
+@api_router.post("/reviews/{review_id}/vote")
+async def vote_review(
+    review_id: str,
+    helpful: bool,
+    current_user: User = Depends(get_current_user)
+):
+    """Vote on review helpfulness"""
+    
+    # Find review
+    review = await db.reviews.find_one({"id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # Check if user already voted
+    existing_vote = await db.review_votes.find_one({
+        "review_id": review_id,
+        "user_id": current_user.id
+    })
+    
+    if existing_vote:
+        raise HTTPException(status_code=400, detail="You have already voted on this review")
+    
+    # Record vote
+    vote_record = {
+        "id": str(uuid.uuid4()),
+        "review_id": review_id,
+        "user_id": current_user.id,
+        "helpful": helpful,
+        "created_date": datetime.utcnow()
+    }
+    await db.review_votes.insert_one(vote_record)
+    
+    # Update review vote counts
+    if helpful:
+        await db.reviews.update_one(
+            {"id": review_id},
+            {"$inc": {"helpful_votes": 1, "total_votes": 1}}
+        )
+    else:
+        await db.reviews.update_one(
+            {"id": review_id},
+            {"$inc": {"total_votes": 1}}
+        )
+    
+    return {"message": "Vote recorded successfully"}
+
+@api_router.get("/content/{content_id}/ratings", response_model=ContentRating)
+async def get_content_ratings(content_id: str):
+    """Get content rating statistics"""
+    
+    # Check if content exists
+    content = await db.content.find_one({"id": content_id})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Get rating statistics
+    rating_pipeline = [
+        {"$match": {"content_id": content_id}},
+        {"$group": {
+            "_id": None,
+            "avg_rating": {"$avg": "$rating"},
+            "total_reviews": {"$sum": 1},
+            "ratings": {"$push": "$rating"}
+        }}
+    ]
+    
+    result = await db.reviews.aggregate(rating_pipeline).to_list(1)
+    
+    if not result:
+        return ContentRating(
+            average_rating=0.0,
+            total_reviews=0,
+            rating_distribution={}
+        )
+    
+    data = result[0]
+    avg_rating = round(data["avg_rating"], 1)
+    total_reviews = data["total_reviews"]
+    ratings = data["ratings"]
+    
+    # Calculate rating distribution (1-10 scale, grouped by whole numbers)
+    rating_distribution = {}
+    for i in range(1, 11):
+        rating_distribution[str(i)] = sum(1 for r in ratings if i <= r < i + 1)
+    
+    # Handle ratings of exactly 10
+    rating_distribution["10"] = sum(1 for r in ratings if r == 10.0)
+    
+    return ContentRating(
+        average_rating=avg_rating,
+        total_reviews=total_reviews,
+        rating_distribution=rating_distribution
+    )
+
+# Helper function to update content rating
+async def update_content_rating(content_id: str):
+    """Update content's average rating and review count"""
+    
+    # Calculate new average rating
+    rating_pipeline = [
+        {"$match": {"content_id": content_id}},
+        {"$group": {
+            "_id": None,
+            "avg_rating": {"$avg": "$rating"},
+            "total_reviews": {"$sum": 1}
+        }}
+    ]
+    
+    result = await db.reviews.aggregate(rating_pipeline).to_list(1)
+    
+    if result:
+        data = result[0]
+        avg_rating = round(data["avg_rating"], 1)
+        total_reviews = data["total_reviews"]
+    else:
+        avg_rating = 0.0
+        total_reviews = 0
+    
+    # Update content document
+    await db.content.update_one(
+        {"id": content_id},
+        {"$set": {
+            "rating": avg_rating,
+            "review_count": total_reviews,
+            "updated_at": datetime.utcnow()
+        }}
+    )
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
