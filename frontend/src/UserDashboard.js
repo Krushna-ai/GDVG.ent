@@ -8,6 +8,8 @@ import WatchlistManager from './WatchlistManager';
 import WatchlistButton from './WatchlistButton';
 import ReviewSystem from './ReviewSystem';
 import QuickRating from './QuickRating';
+import PersonalAnalytics from './PersonalAnalytics';
+import SocialFeatures from './SocialFeatures';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
