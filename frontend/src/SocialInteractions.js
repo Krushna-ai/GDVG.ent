@@ -37,7 +37,7 @@ const SocialInteractions = ({ darkTheme }) => {
     setLoading(true);
     try {
       const response = await axios.get(`${API}/social/trending-users`);
-      setTrendingUsers(response.data.trending_users);
+      setTrendingUsers(response.data.users); // Updated to match new API structure
     } catch (error) {
       console.error('Error fetching trending users:', error);
     } finally {
