@@ -204,7 +204,6 @@ const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                setIsLoginMode(true);
                 setShowUserAuth(true);
               }}
               className={`px-4 py-2 rounded-lg transition-colors ${
@@ -218,7 +217,6 @@ const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
             
             <button
               onClick={() => {
-                setIsLoginMode(false);
                 setShowUserAuth(true);
               }}
               className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
