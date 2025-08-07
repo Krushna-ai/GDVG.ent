@@ -203,7 +203,10 @@ const Header = ({ onSearch, darkTheme, setDarkTheme, onAuthClick }) => {
           {/* Theme Toggle and User Auth */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onAuthClick(true)}
+              onClick={() => {
+                console.log('Sign In clicked');
+                onAuthClick(true);
+              }}
               className={`px-4 py-2 rounded-lg transition-colors ${
                 darkTheme
                   ? 'text-white hover:bg-gray-900'
@@ -214,7 +217,10 @@ const Header = ({ onSearch, darkTheme, setDarkTheme, onAuthClick }) => {
             </button>
             
             <button
-              onClick={() => onAuthClick(false)}
+              onClick={() => {
+                console.log('Sign Up clicked');
+                onAuthClick(false);
+              }}
               className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
             >
               Sign Up
