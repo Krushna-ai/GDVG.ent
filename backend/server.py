@@ -2508,6 +2508,484 @@ async def get_user_interactions(
         "limit": limit
     }
 
+# Week 5: AI-Powered Discovery & Recommendations
+class RecommendationEngine(BaseModel):
+    user_id: str
+    recommended_content: List[dict]
+    recommendation_type: str  # collaborative, content_based, trending, similar_users
+    confidence_score: float
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+# Week 6: Business Model - Premium Features
+class UserSubscription(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    plan_type: str  # free, premium, pro
+    status: str  # active, inactive, cancelled
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    expires_at: Optional[datetime] = None
+    payment_method: Optional[str] = None
+
+# Discovery & Recommendations API Endpoints
+@api_router.get("/recommendations/for-you")
+async def get_personalized_recommendations(
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user)
+):
+    """Get personalized content recommendations for user"""
+    
+    # Get user's viewing history, ratings, and preferences
+    user_preferences = await analyze_user_preferences(current_user.id)
+    
+    # Collaborative filtering - find similar users
+    similar_users = await find_similar_users(current_user.id, limit=5)
+    
+    # Content-based filtering - find similar content to what user liked
+    content_based_recs = await get_content_based_recommendations(current_user.id, limit=10)
+    
+    # Trending content filtered by preferences
+    trending_recs = await get_trending_recommendations(user_preferences, limit=10)
+    
+    # Combine and score recommendations
+    all_recommendations = []
+    
+    # Add collaborative filtering results
+    for similar_user in similar_users:
+        user_content = await get_user_highly_rated_content(similar_user["user_id"], limit=3)
+        for content in user_content:
+            content["recommendation_type"] = "collaborative"
+            content["confidence_score"] = 0.7 * similar_user["similarity_score"]
+            all_recommendations.append(content)
+    
+    # Add content-based results
+    for content in content_based_recs:
+        content["recommendation_type"] = "content_based"
+        all_recommendations.append(content)
+    
+    # Add trending results
+    for content in trending_recs:
+        content["recommendation_type"] = "trending"
+        all_recommendations.append(content)
+    
+    # Remove duplicates and sort by confidence score
+    seen_content = set()
+    unique_recommendations = []
+    
+    for rec in sorted(all_recommendations, key=lambda x: x.get("confidence_score", 0.5), reverse=True):
+        if rec["id"] not in seen_content:
+            seen_content.add(rec["id"])
+            unique_recommendations.append(rec)
+    
+    return {
+        "recommendations": unique_recommendations[:limit],
+        "user_preferences": user_preferences,
+        "algorithm_types": ["collaborative", "content_based", "trending"]
+    }
+
+@api_router.get("/recommendations/similar/{content_id}")
+async def get_similar_content(
+    content_id: str,
+    limit: int = Query(10, ge=1, le=50)
+):
+    """Get content similar to a specific item"""
+    
+    # Check if content exists
+    content = await db.content.find_one({"id": content_id})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Find similar content based on genres, country, rating, and type
+    similar_content = await db.content.aggregate([
+        {"$match": {
+            "id": {"$ne": content_id},
+            "$or": [
+                {"genres": {"$in": content["genres"]}},
+                {"country": content["country"]},
+                {"content_type": content["content_type"]}
+            ]
+        }},
+        {"$addFields": {
+            "similarity_score": {
+                "$add": [
+                    {"$multiply": [
+                        {"$size": {"$setIntersection": ["$genres", content["genres"]]}},
+                        0.4
+                    ]},
+                    {"$cond": [{"$eq": ["$country", content["country"]]}, 0.3, 0]},
+                    {"$cond": [{"$eq": ["$content_type", content["content_type"]]}, 0.2, 0]},
+                    {"$multiply": [
+                        {"$subtract": [1, {"$abs": {"$subtract": ["$rating", content["rating"]]}}]},
+                        0.1
+                    ]}
+                ]
+            }
+        }},
+        {"$sort": {"similarity_score": -1, "rating": -1}},
+        {"$limit": limit},
+        {"$project": {"_id": 0}}
+    ]).to_list(limit)
+    
+    return {
+        "original_content": {
+            "id": content["id"],
+            "title": content["title"],
+            "genres": content["genres"],
+            "country": content["country"]
+        },
+        "similar_content": similar_content
+    }
+
+@api_router.get("/discovery/trending")
+async def get_trending_discovery(
+    time_period: str = Query("week", regex="^(day|week|month)$"),
+    limit: int = Query(20, ge=1, le=50)
+):
+    """Get trending content for discovery"""
+    
+    # Calculate time range
+    if time_period == "day":
+        time_delta = timedelta(days=1)
+    elif time_period == "week":
+        time_delta = timedelta(days=7)
+    else:  # month
+        time_delta = timedelta(days=30)
+    
+    time_cutoff = datetime.utcnow() - time_delta
+    
+    # Get content with most interactions in time period
+    trending = await db.content.aggregate([
+        {"$lookup": {
+            "from": "reviews",
+            "localField": "id",
+            "foreignField": "content_id",
+            "as": "recent_reviews",
+            "pipeline": [
+                {"$match": {"created_date": {"$gte": time_cutoff}}}
+            ]
+        }},
+        {"$lookup": {
+            "from": "watchlist",
+            "localField": "id", 
+            "foreignField": "content_id",
+            "as": "recent_watchlist",
+            "pipeline": [
+                {"$match": {"updated_date": {"$gte": time_cutoff}}}
+            ]
+        }},
+        {"$addFields": {
+            "trending_score": {
+                "$add": [
+                    {"$multiply": [{"$size": "$recent_reviews"}, 3]},
+                    {"$multiply": [{"$size": "$recent_watchlist"}, 2]},
+                    {"$multiply": ["$rating", 0.5]}
+                ]
+            }
+        }},
+        {"$match": {"trending_score": {"$gt": 0}}},
+        {"$sort": {"trending_score": -1}},
+        {"$limit": limit},
+        {"$project": {"_id": 0, "recent_reviews": 0, "recent_watchlist": 0}}
+    ]).to_list(limit)
+    
+    return {
+        "trending_content": trending,
+        "time_period": time_period,
+        "generated_at": datetime.utcnow()
+    }
+
+# Business Model - Premium Features API
+@api_router.get("/premium/features")
+async def get_premium_features():
+    """Get available premium features and plans"""
+    
+    features = {
+        "free_plan": {
+            "name": "Free",
+            "price": 0,
+            "features": [
+                "Basic content browsing",
+                "Create watchlists",
+                "Write reviews and ratings",
+                "Follow other users",
+                "Basic recommendations"
+            ],
+            "limits": {
+                "watchlists": 3,
+                "reviews_per_month": 10,
+                "following": 50
+            }
+        },
+        "premium_plan": {
+            "name": "Premium",
+            "price": 9.99,
+            "price_yearly": 99.99,
+            "features": [
+                "All free features",
+                "Unlimited watchlists",
+                "Advanced recommendations",
+                "Priority support",
+                "Export watchlists",
+                "Advanced statistics",
+                "No ads"
+            ],
+            "limits": {
+                "watchlists": "unlimited",
+                "reviews_per_month": "unlimited", 
+                "following": 500
+            }
+        },
+        "pro_plan": {
+            "name": "Pro",
+            "price": 19.99,
+            "price_yearly": 199.99,
+            "features": [
+                "All premium features",
+                "API access",
+                "Bulk import tools",
+                "Custom lists",
+                "Analytics dashboard",
+                "White-label options",
+                "Priority recommendations"
+            ],
+            "limits": {
+                "watchlists": "unlimited",
+                "reviews_per_month": "unlimited",
+                "following": "unlimited"
+            }
+        }
+    }
+    
+    return features
+
+@api_router.get("/premium/check")
+async def check_premium_status(current_user: User = Depends(get_current_user)):
+    """Check user's premium status"""
+    
+    subscription = await db.user_subscriptions.find_one({
+        "user_id": current_user.id,
+        "status": "active"
+    })
+    
+    if subscription:
+        is_premium = subscription["plan_type"] in ["premium", "pro"]
+        is_expired = subscription.get("expires_at") and subscription["expires_at"] < datetime.utcnow()
+        
+        return {
+            "is_premium": is_premium and not is_expired,
+            "plan_type": subscription["plan_type"],
+            "expires_at": subscription.get("expires_at"),
+            "status": subscription["status"]
+        }
+    else:
+        return {
+            "is_premium": False,
+            "plan_type": "free",
+            "expires_at": None,
+            "status": "free"
+        }
+
+# Helper functions for recommendations
+async def analyze_user_preferences(user_id: str) -> dict:
+    """Analyze user preferences from their activity"""
+    
+    # Get user's favorite genres from ratings and watchlist
+    genre_prefs = await db.reviews.aggregate([
+        {"$match": {"user_id": user_id, "rating": {"$gte": 7}}},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$unwind": "$content.genres"},
+        {"$group": {"_id": "$content.genres", "count": {"$sum": 1}, "avg_rating": {"$avg": "$rating"}}},
+        {"$sort": {"count": -1, "avg_rating": -1}},
+        {"$limit": 5}
+    ]).to_list(5)
+    
+    # Get favorite countries
+    country_prefs = await db.reviews.aggregate([
+        {"$match": {"user_id": user_id, "rating": {"$gte": 7}}},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id", 
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$group": {"_id": "$content.country", "count": {"$sum": 1}, "avg_rating": {"$avg": "$rating"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 3}
+    ]).to_list(3)
+    
+    return {
+        "favorite_genres": [{"genre": g["_id"], "score": g["count"] * g["avg_rating"]} for g in genre_prefs],
+        "favorite_countries": [{"country": c["_id"], "score": c["count"]} for c in country_prefs],
+        "min_rating_threshold": 6.0
+    }
+
+async def find_similar_users(user_id: str, limit: int = 5) -> List[dict]:
+    """Find users with similar preferences"""
+    
+    # Get current user's ratings
+    user_ratings = await db.reviews.find({"user_id": user_id}).to_list(None)
+    user_content_ratings = {r["content_id"]: r["rating"] for r in user_ratings}
+    
+    if not user_content_ratings:
+        return []
+    
+    # Find other users who rated the same content
+    similar_users = []
+    content_ids = list(user_content_ratings.keys())
+    
+    # Get other users' ratings for same content
+    other_ratings = await db.reviews.aggregate([
+        {"$match": {
+            "content_id": {"$in": content_ids},
+            "user_id": {"$ne": user_id}
+        }},
+        {"$group": {
+            "_id": "$user_id",
+            "ratings": {"$push": {"content_id": "$content_id", "rating": "$rating"}},
+            "count": {"$sum": 1}
+        }},
+        {"$match": {"count": {"$gte": 3}}},  # At least 3 common ratings
+        {"$sort": {"count": -1}},
+        {"$limit": limit * 2}
+    ]).to_list(limit * 2)
+    
+    # Calculate similarity scores (simple correlation)
+    for other_user in other_ratings:
+        other_ratings_dict = {r["content_id"]: r["rating"] for r in other_user["ratings"]}
+        
+        # Calculate Pearson correlation coefficient
+        common_content = set(user_content_ratings.keys()) & set(other_ratings_dict.keys())
+        
+        if len(common_content) >= 3:
+            similarity = calculate_similarity_score(
+                [user_content_ratings[c] for c in common_content],
+                [other_ratings_dict[c] for c in common_content]
+            )
+            
+            similar_users.append({
+                "user_id": other_user["_id"],
+                "similarity_score": similarity,
+                "common_ratings": len(common_content)
+            })
+    
+    return sorted(similar_users, key=lambda x: x["similarity_score"], reverse=True)[:limit]
+
+def calculate_similarity_score(ratings1: List[float], ratings2: List[float]) -> float:
+    """Calculate similarity score between two rating lists"""
+    if not ratings1 or not ratings2 or len(ratings1) != len(ratings2):
+        return 0.0
+    
+    # Simple correlation coefficient
+    n = len(ratings1)
+    sum1 = sum(ratings1)
+    sum2 = sum(ratings2)
+    sum1_sq = sum(r * r for r in ratings1)
+    sum2_sq = sum(r * r for r in ratings2)
+    sum_products = sum(ratings1[i] * ratings2[i] for i in range(n))
+    
+    numerator = sum_products - (sum1 * sum2 / n)
+    denominator = ((sum1_sq - sum1 * sum1 / n) * (sum2_sq - sum2 * sum2 / n)) ** 0.5
+    
+    if denominator == 0:
+        return 0.0
+    
+    correlation = numerator / denominator
+    return max(0, correlation)  # Only positive correlations
+
+async def get_content_based_recommendations(user_id: str, limit: int = 10) -> List[dict]:
+    """Get content recommendations based on user's preferences"""
+    
+    preferences = await analyze_user_preferences(user_id)
+    
+    if not preferences["favorite_genres"]:
+        return []
+    
+    # Get user's already rated content to exclude
+    rated_content = await db.reviews.find({"user_id": user_id}, {"content_id": 1}).to_list(None)
+    rated_content_ids = [r["content_id"] for r in rated_content]
+    
+    # Find content matching preferences
+    favorite_genres = [g["genre"] for g in preferences["favorite_genres"][:3]]
+    favorite_countries = [c["country"] for c in preferences["favorite_countries"][:2]]
+    
+    recommendations = await db.content.find({
+        "id": {"$nin": rated_content_ids},
+        "$or": [
+            {"genres": {"$in": favorite_genres}},
+            {"country": {"$in": favorite_countries}}
+        ],
+        "rating": {"$gte": preferences["min_rating_threshold"]}
+    }).sort("rating", -1).limit(limit).to_list(limit)
+    
+    # Add confidence scores
+    for rec in recommendations:
+        genre_match = len(set(rec["genres"]) & set(favorite_genres))
+        country_match = 1 if rec["country"] in favorite_countries else 0
+        
+        rec["confidence_score"] = min(1.0, (genre_match * 0.3 + country_match * 0.4 + rec["rating"] * 0.1))
+        if "_id" in rec:
+            del rec["_id"]
+    
+    return recommendations
+
+async def get_trending_recommendations(user_preferences: dict, limit: int = 10) -> List[dict]:
+    """Get trending content filtered by user preferences"""
+    
+    favorite_genres = [g["genre"] for g in user_preferences["favorite_genres"][:2]]
+    
+    trending = await db.content.aggregate([
+        {"$match": {
+            "genres": {"$in": favorite_genres} if favorite_genres else {},
+            "rating": {"$gte": user_preferences.get("min_rating_threshold", 6.0)}
+        }},
+        {"$lookup": {
+            "from": "reviews",
+            "localField": "id",
+            "foreignField": "content_id", 
+            "as": "recent_reviews",
+            "pipeline": [
+                {"$match": {"created_date": {"$gte": datetime.utcnow() - timedelta(days=7)}}}
+            ]
+        }},
+        {"$addFields": {
+            "trending_score": {"$size": "$recent_reviews"},
+            "confidence_score": 0.6
+        }},
+        {"$match": {"trending_score": {"$gt": 0}}},
+        {"$sort": {"trending_score": -1, "rating": -1}},
+        {"$limit": limit},
+        {"$project": {"_id": 0, "recent_reviews": 0}}
+    ]).to_list(limit)
+    
+    return trending
+
+async def get_user_highly_rated_content(user_id: str, limit: int = 5) -> List[dict]:
+    """Get highly rated content by a specific user"""
+    
+    highly_rated = await db.reviews.aggregate([
+        {"$match": {"user_id": user_id, "rating": {"$gte": 8}}},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$unwind": "$content"},
+        {"$sort": {"rating": -1}},
+        {"$limit": limit},
+        {"$replaceRoot": {"newRoot": "$content"}},
+        {"$project": {"_id": 0}},
+        {"$addFields": {"confidence_score": 0.8}}
+    ]).to_list(limit)
+    
+    return highly_rated
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
