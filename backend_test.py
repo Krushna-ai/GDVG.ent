@@ -1642,7 +1642,7 @@ class BackendTester:
     
     def run_all_tests(self):
         """Run all backend tests"""
-        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 4 Watchlist System")
+        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 6 & 7: Personal Analytics & Social Features")
         print(f"Backend URL: {self.base_url}")
         print("=" * 80)
         
@@ -1684,6 +1684,23 @@ class BackendTester:
         self.test_watchlist_update_item()
         self.test_watchlist_stats()
         self.test_watchlist_remove_content()
+        
+        # Day 6 Personal Analytics Tests
+        print("\n📊 DAY 6 PERSONAL ANALYTICS TESTS")
+        print("-" * 50)
+        self.test_analytics_track_viewing()
+        self.test_analytics_dashboard()
+        self.test_analytics_history()
+        
+        # Day 7 Social Features Tests
+        print("\n👥 DAY 7 SOCIAL FEATURES TESTS")
+        print("-" * 50)
+        self.test_social_unauthorized_access()
+        self.test_social_follow_user()
+        self.test_social_unfollow_user()
+        self.test_social_followers_following()
+        self.test_social_activity_feed()
+        self.test_social_user_stats()
         
         # Legacy endpoints
         print("\n🔄 LEGACY ENDPOINTS")
