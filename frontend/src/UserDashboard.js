@@ -12,6 +12,8 @@ import PersonalAnalytics from './PersonalAnalytics';
 import SocialFeatures from './SocialFeatures';
 import SocialInteractions from './SocialInteractions';
 import ReviewInteractions from './ReviewInteractions';
+import SmartRecommendations from './SmartRecommendations';
+import PremiumFeatures from './PremiumFeatures';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
