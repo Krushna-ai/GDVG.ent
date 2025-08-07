@@ -536,7 +536,7 @@ async def admin_login(admin_data: AdminLogin):
             detail="Incorrect username or password"
         )
     
-    access_token = create_access_token(data={"sub": admin_data.username})
+    access_token = create_access_token(data={"sub": admin_data.username, "type": "admin"})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @api_router.get("/admin/stats", response_model=AdminStats)
