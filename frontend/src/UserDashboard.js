@@ -75,10 +75,10 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="hidden md:flex space-x-8">
+          <nav className="hidden md:flex space-x-6">
             <button 
               onClick={() => setCurrentView('home')}
-              className={`transition-colors ${
+              className={`transition-colors text-sm ${
                 currentView === 'home'
                   ? 'text-red-400'
                   : darkTheme
@@ -89,7 +89,7 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
             </button>
             <button 
               onClick={() => setCurrentView('watchlist')}
-              className={`transition-colors ${
+              className={`transition-colors text-sm ${
                 currentView === 'watchlist'
                   ? 'text-red-400'
                   : darkTheme
@@ -99,19 +99,41 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
               My List
             </button>
             <button 
+              onClick={() => setCurrentView('analytics')}
+              className={`transition-colors text-sm ${
+                currentView === 'analytics'
+                  ? 'text-red-400'
+                  : darkTheme
+                  ? 'text-gray-400 hover:text-red-400'
+                  : 'text-gray-600 hover:text-red-600'
+              }`}>
+              Analytics
+            </button>
+            <button 
+              onClick={() => setCurrentView('social')}
+              className={`transition-colors text-sm ${
+                currentView === 'social'
+                  ? 'text-red-400'
+                  : darkTheme
+                  ? 'text-gray-400 hover:text-red-400'
+                  : 'text-gray-600 hover:text-red-600'
+              }`}>
+              Social
+            </button>
+            <button 
               onClick={() => setCurrentView('stats')}
-              className={`transition-colors ${
+              className={`transition-colors text-sm ${
                 currentView === 'stats'
                   ? 'text-red-400'
                   : darkTheme
                   ? 'text-gray-400 hover:text-red-400'
                   : 'text-gray-600 hover:text-red-600'
               }`}>
-              My Stats
+              Stats
             </button>
             <button 
               onClick={() => setCurrentView('profile')}
-              className={`transition-colors ${
+              className={`transition-colors text-sm ${
                 currentView === 'profile'
                   ? 'text-red-400'
                   : darkTheme
