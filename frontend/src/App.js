@@ -800,6 +800,7 @@ function App() {
         onSearch={handleSearch} 
         darkTheme={darkTheme} 
         setDarkTheme={setDarkTheme} 
+        onAuthClick={handleAuthClick}
       />
       
       {!searchQuery && <HeroSection darkTheme={darkTheme} />}
