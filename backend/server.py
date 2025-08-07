@@ -131,6 +131,46 @@ class UserSettings(BaseModel):
         "lists_public": True
     })
 
+# Watchlist Models
+class WatchlistStatus(str, Enum):
+    WANT_TO_WATCH = "want_to_watch"
+    WATCHING = "watching" 
+    COMPLETED = "completed"
+    DROPPED = "dropped"
+
+class WatchlistItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    content_id: str
+    status: WatchlistStatus
+    progress: Optional[int] = None  # For episodes/duration progress
+    total_episodes: Optional[int] = None  # Total episodes if series
+    rating: Optional[float] = None  # User's personal rating
+    notes: Optional[str] = None
+    started_date: Optional[datetime] = None
+    completed_date: Optional[datetime] = None
+    updated_date: datetime = Field(default_factory=datetime.utcnow)
+    created_date: datetime = Field(default_factory=datetime.utcnow)
+
+class WatchlistItemCreate(BaseModel):
+    content_id: str
+    status: WatchlistStatus
+    progress: Optional[int] = None
+    total_episodes: Optional[int] = None
+    rating: Optional[float] = None
+    notes: Optional[str] = None
+
+class WatchlistItemUpdate(BaseModel):
+    status: Optional[WatchlistStatus] = None
+    progress: Optional[int] = None
+    rating: Optional[float] = None
+    notes: Optional[str] = None
+
+class WatchlistResponse(BaseModel):
+    items: List[dict]  # Will include content details
+    total: int
+    status_counts: dict
+
 class AdminLogin(BaseModel):
     username: str
     password: str
