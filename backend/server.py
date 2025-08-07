@@ -2151,7 +2151,7 @@ async def get_review_comments(
 @api_router.put("/comments/{comment_id}")
 async def update_comment(
     comment_id: str,
-    comment_text: str,
+    comment_data: dict,
     current_user: User = Depends(get_current_user)
 ):
     """Update user's own comment"""
@@ -2165,11 +2165,16 @@ async def update_comment(
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found or not owned by user")
     
+    # Validate comment text
+    comment_text = comment_data.get("comment_text")
+    if not comment_text or not comment_text.strip():
+        raise HTTPException(status_code=400, detail="Comment text is required")
+    
     # Update comment
     await db.review_comments.update_one(
         {"id": comment_id, "user_id": current_user.id},
         {"$set": {
-            "comment_text": comment_text,
+            "comment_text": comment_text.strip(),
             "updated_at": datetime.utcnow()
         }}
     )
