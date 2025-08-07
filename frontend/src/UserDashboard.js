@@ -10,6 +10,7 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [contents, setContents] = useState([]);
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'profile', 'stats'
 
   useEffect(() => {
     fetchUserProfile();
