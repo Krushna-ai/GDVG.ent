@@ -2269,7 +2269,7 @@ class BackendTester:
     
     def run_all_tests(self):
         """Run all backend tests"""
-        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 6 & 7: Personal Analytics & Social Features")
+        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 8 & 9: Enhanced Social Interactions")
         print(f"Backend URL: {self.base_url}")
         print("=" * 80)
         
@@ -2328,6 +2328,18 @@ class BackendTester:
         self.test_social_followers_following()
         self.test_social_activity_feed()
         self.test_social_user_stats()
+        
+        # Day 8-9 Enhanced Social Interactions Tests
+        print("\n💬 DAY 8-9 ENHANCED SOCIAL INTERACTIONS TESTS")
+        print("-" * 50)
+        self.test_review_like_unlike()
+        self.test_review_likes_list()
+        self.test_review_comments()
+        self.test_review_comments_list()
+        self.test_comment_update_delete()
+        self.test_social_notifications()
+        self.test_social_trending_users()
+        self.test_social_user_interactions()
         
         # Legacy endpoints
         print("\n🔄 LEGACY ENDPOINTS")
