@@ -718,6 +718,210 @@ async def update_user_settings(
     
     return settings_data
 
+# Watchlist API Endpoints
+@api_router.get("/watchlist", response_model=WatchlistResponse)
+async def get_user_watchlist(
+    status: Optional[WatchlistStatus] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's watchlist with optional status filter"""
+    skip = (page - 1) * limit
+    
+    # Build filter query
+    filter_query = {"user_id": current_user.id}
+    if status:
+        filter_query["status"] = status
+    
+    # Get watchlist items
+    cursor = db.watchlist.find(filter_query).sort("updated_date", -1).skip(skip).limit(limit)
+    watchlist_items = await cursor.to_list(length=limit)
+    
+    # Get content details for each item
+    items_with_content = []
+    for item in watchlist_items:
+        if '_id' in item:
+            del item['_id']
+        
+        # Fetch content details
+        content = await db.content.find_one({"id": item["content_id"]})
+        if content:
+            if '_id' in content:
+                del content['_id']
+            
+            item_with_content = {
+                **item,
+                "content": content
+            }
+            items_with_content.append(item_with_content)
+    
+    # Get total count
+    total = await db.watchlist.count_documents({"user_id": current_user.id})
+    
+    # Get status counts
+    status_counts = {}
+    for status_value in WatchlistStatus:
+        count = await db.watchlist.count_documents({
+            "user_id": current_user.id,
+            "status": status_value.value
+        })
+        status_counts[status_value.value] = count
+    
+    return WatchlistResponse(
+        items=items_with_content,
+        total=total,
+        status_counts=status_counts
+    )
+
+@api_router.post("/watchlist", response_model=dict)
+async def add_to_watchlist(
+    item_data: WatchlistItemCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Add content to user's watchlist"""
+    
+    # Check if content exists
+    content = await db.content.find_one({"id": item_data.content_id})
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    # Check if item already exists in watchlist
+    existing_item = await db.watchlist.find_one({
+        "user_id": current_user.id,
+        "content_id": item_data.content_id
+    })
+    
+    if existing_item:
+        raise HTTPException(status_code=400, detail="Content already in watchlist")
+    
+    # Create watchlist item
+    watchlist_item = WatchlistItem(
+        user_id=current_user.id,
+        **item_data.dict()
+    )
+    
+    # Set dates based on status
+    if item_data.status == WatchlistStatus.WATCHING:
+        watchlist_item.started_date = datetime.utcnow()
+    elif item_data.status == WatchlistStatus.COMPLETED:
+        watchlist_item.started_date = datetime.utcnow()
+        watchlist_item.completed_date = datetime.utcnow()
+    
+    # Insert into database
+    await db.watchlist.insert_one(watchlist_item.dict())
+    
+    return {"message": "Content added to watchlist successfully", "id": watchlist_item.id}
+
+@api_router.put("/watchlist/{item_id}", response_model=dict)
+async def update_watchlist_item(
+    item_id: str,
+    item_data: WatchlistItemUpdate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update watchlist item"""
+    
+    # Find existing item
+    existing_item = await db.watchlist.find_one({
+        "id": item_id,
+        "user_id": current_user.id
+    })
+    
+    if not existing_item:
+        raise HTTPException(status_code=404, detail="Watchlist item not found")
+    
+    # Build update data
+    update_data = {k: v for k, v in item_data.dict().items() if v is not None}
+    
+    # Update dates based on status changes
+    if item_data.status:
+        if item_data.status == WatchlistStatus.WATCHING and not existing_item.get("started_date"):
+            update_data["started_date"] = datetime.utcnow()
+        elif item_data.status == WatchlistStatus.COMPLETED:
+            if not existing_item.get("started_date"):
+                update_data["started_date"] = datetime.utcnow()
+            update_data["completed_date"] = datetime.utcnow()
+        elif item_data.status == WatchlistStatus.DROPPED and not existing_item.get("started_date"):
+            update_data["started_date"] = datetime.utcnow()
+    
+    update_data["updated_date"] = datetime.utcnow()
+    
+    # Update in database
+    await db.watchlist.update_one(
+        {"id": item_id, "user_id": current_user.id},
+        {"$set": update_data}
+    )
+    
+    return {"message": "Watchlist item updated successfully"}
+
+@api_router.delete("/watchlist/{item_id}")
+async def remove_from_watchlist(
+    item_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Remove content from user's watchlist"""
+    
+    # Check if item exists
+    existing_item = await db.watchlist.find_one({
+        "id": item_id,
+        "user_id": current_user.id
+    })
+    
+    if not existing_item:
+        raise HTTPException(status_code=404, detail="Watchlist item not found")
+    
+    # Delete item
+    await db.watchlist.delete_one({
+        "id": item_id,
+        "user_id": current_user.id
+    })
+    
+    return {"message": "Content removed from watchlist successfully"}
+
+@api_router.get("/watchlist/stats", response_model=dict)
+async def get_watchlist_stats(current_user: User = Depends(get_current_user)):
+    """Get user's watchlist statistics"""
+    
+    # Get status counts
+    status_counts = {}
+    for status_value in WatchlistStatus:
+        count = await db.watchlist.count_documents({
+            "user_id": current_user.id,
+            "status": status_value.value
+        })
+        status_counts[status_value.value] = count
+    
+    # Get total content count
+    total_content = await db.watchlist.count_documents({"user_id": current_user.id})
+    
+    # Get recent activity (last 10 items)
+    recent_cursor = db.watchlist.find({
+        "user_id": current_user.id
+    }).sort("updated_date", -1).limit(10)
+    recent_items = await recent_cursor.to_list(length=10)
+    
+    # Get content details for recent items
+    recent_with_content = []
+    for item in recent_items:
+        if '_id' in item:
+            del item['_id']
+        
+        content = await db.content.find_one({"id": item["content_id"]})
+        if content:
+            if '_id' in content:
+                del content['_id']
+            
+            recent_with_content.append({
+                **item,
+                "content": content
+            })
+    
+    return {
+        "status_counts": status_counts,
+        "total_content": total_content,
+        "recent_activity": recent_with_content
+    }
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
