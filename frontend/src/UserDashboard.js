@@ -125,10 +125,16 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
             {/* User Avatar & Menu */}
             <div className="relative">
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${
                   darkTheme ? 'bg-red-600' : 'bg-red-500'
-                } text-white font-semibold`}>
-                  {userProfile?.first_name?.charAt(0)?.toUpperCase() || 'U'}
+                }`}>
+                  {userProfile?.avatar_url ? (
+                    <img src={userProfile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-white font-semibold text-sm">
+                      {userProfile?.first_name?.charAt(0)?.toUpperCase() || 'U'}
+                    </span>
+                  )}
                 </div>
                 <span className={`hidden md:block font-medium ${
                   darkTheme ? 'text-white' : 'text-gray-900'
