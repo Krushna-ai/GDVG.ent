@@ -209,7 +209,10 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Day 3: Public Content Discovery - Advanced Search Integration"
+    - "Day 3: Public Content Discovery - Featured Sections Integration" 
+    - "Day 3: Public Content Discovery - UserDashboard Enhancement"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
