@@ -69,27 +69,39 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
 
           {/* Navigation */}
           <nav className="hidden md:flex space-x-8">
-            <a href="#" className={`transition-colors ${
-              darkTheme
-                ? 'text-white hover:text-red-400'
-                : 'text-gray-900 hover:text-red-600'
-            }`}>
+            <button 
+              onClick={() => setCurrentView('home')}
+              className={`transition-colors ${
+                currentView === 'home'
+                  ? 'text-red-400'
+                  : darkTheme
+                  ? 'text-gray-400 hover:text-red-400'
+                  : 'text-gray-600 hover:text-red-600'
+              }`}>
               Discover
-            </a>
-            <a href="#" className={`transition-colors ${
-              darkTheme
-                ? 'text-gray-400 hover:text-red-400'
-                : 'text-gray-600 hover:text-red-600'
-            }`}>
-              My Lists
-            </a>
-            <a href="#" className={`transition-colors ${
-              darkTheme
-                ? 'text-gray-400 hover:text-red-400'
-                : 'text-gray-600 hover:text-red-600'
-            }`}>
-              Social
-            </a>
+            </button>
+            <button 
+              onClick={() => setCurrentView('stats')}
+              className={`transition-colors ${
+                currentView === 'stats'
+                  ? 'text-red-400'
+                  : darkTheme
+                  ? 'text-gray-400 hover:text-red-400'
+                  : 'text-gray-600 hover:text-red-600'
+              }`}>
+              My Stats
+            </button>
+            <button 
+              onClick={() => setCurrentView('profile')}
+              className={`transition-colors ${
+                currentView === 'profile'
+                  ? 'text-red-400'
+                  : darkTheme
+                  ? 'text-gray-400 hover:text-red-400'
+                  : 'text-gray-600 hover:text-red-600'
+              }`}>
+              Profile
+            </button>
           </nav>
 
           {/* User Menu */}
