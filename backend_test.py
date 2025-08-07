@@ -1082,7 +1082,7 @@ class BackendTester:
     
     def run_all_tests(self):
         """Run all backend tests"""
-        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 3 Public Content Discovery")
+        print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 4 Watchlist System")
         print(f"Backend URL: {self.base_url}")
         print("=" * 80)
         
@@ -1109,6 +1109,21 @@ class BackendTester:
         self.test_countries_endpoint()
         self.test_genres_endpoint()
         self.test_content_types_endpoint()
+        
+        # User Authentication for Watchlist Tests
+        print("\n🔐 USER AUTHENTICATION TESTS")
+        print("-" * 50)
+        self.test_user_authentication()
+        
+        # Day 4 Watchlist System Tests
+        print("\n📝 DAY 4 WATCHLIST SYSTEM TESTS")
+        print("-" * 50)
+        self.test_watchlist_unauthorized_access()
+        self.test_watchlist_add_content()
+        self.test_watchlist_get_user_watchlist()
+        self.test_watchlist_update_item()
+        self.test_watchlist_stats()
+        self.test_watchlist_remove_content()
         
         # Legacy endpoints
         print("\n🔄 LEGACY ENDPOINTS")
