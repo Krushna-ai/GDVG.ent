@@ -719,6 +719,7 @@ function App() {
 
   const handleAuthClick = (isLogin) => {
     console.log('Auth click triggered, isLogin:', isLogin);
+    console.log('Setting showUserAuth to true');
     setIsLoginMode(isLogin);
     setShowUserAuth(true);
   };
