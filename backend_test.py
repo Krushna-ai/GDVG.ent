@@ -18,6 +18,9 @@ class BackendTester:
         self.base_url = BACKEND_URL
         self.test_results = []
         self.sample_content_id = None
+        self.auth_token = None
+        self.test_user_id = None
+        self.test_watchlist_item_id = None
         
     def log_test(self, test_name: str, success: bool, message: str, details: Dict = None):
         """Log test results"""
