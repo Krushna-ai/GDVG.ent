@@ -1035,10 +1035,122 @@ async def download_template(current_admin: AdminUser = Depends(get_current_admin
         "sample_data": template_data
     }
 
-@api_router.get("/trending", response_model=List[Content])
-async def get_trending_content(limit: int = Query(10, ge=1, le=50)):
-    """Get trending content (highest rated recent content)"""
-    cursor = db.content.find().sort([("rating", -1), ("created_at", -1)]).limit(limit)
+@api_router.get("/content/search")
+async def advanced_content_search(
+    query: Optional[str] = None,
+    country: Optional[str] = None,
+    content_type: Optional[ContentType] = None,
+    genre: Optional[ContentGenre] = None,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    rating_min: Optional[float] = None,
+    rating_max: Optional[float] = None,
+    sort_by: Optional[str] = "created_at",  # created_at, rating, year, title
+    sort_order: Optional[str] = "desc",  # asc, desc
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Advanced content search with multiple filters and sorting"""
+    skip = (page - 1) * limit
+    
+    # Build filter query
+    filter_query = {}
+    
+    if query:
+        filter_query["$or"] = [
+            {"title": {"$regex": query, "$options": "i"}},
+            {"original_title": {"$regex": query, "$options": "i"}},
+            {"synopsis": {"$regex": query, "$options": "i"}},
+            {"tags": {"$regex": query, "$options": "i"}},
+            {"cast.name": {"$regex": query, "$options": "i"}},
+            {"crew.name": {"$regex": query, "$options": "i"}}
+        ]
+    
+    if country:
+        filter_query["country"] = {"$regex": country, "$options": "i"}
+    
+    if content_type:
+        filter_query["content_type"] = content_type
+    
+    if genre:
+        filter_query["genres"] = genre
+    
+    # Year range filter
+    if year_from or year_to:
+        year_filter = {}
+        if year_from:
+            year_filter["$gte"] = year_from
+        if year_to:
+            year_filter["$lte"] = year_to
+        filter_query["year"] = year_filter
+    
+    # Rating range filter
+    if rating_min or rating_max:
+        rating_filter = {}
+        if rating_min:
+            rating_filter["$gte"] = rating_min
+        if rating_max:
+            rating_filter["$lte"] = rating_max
+        filter_query["rating"] = rating_filter
+    
+    # Build sort criteria
+    sort_direction = 1 if sort_order == "asc" else -1
+    sort_criteria = [(sort_by, sort_direction)]
+    
+    # Get total count
+    total = await db.content.count_documents(filter_query)
+    
+    # Get paginated results
+    cursor = db.content.find(filter_query).sort(sort_criteria).skip(skip).limit(limit)
+    contents = await cursor.to_list(length=limit)
+    
+    # Convert ObjectId to string and create Content objects
+    content_list = []
+    for content in contents:
+        if '_id' in content:
+            del content['_id']
+        content_list.append(Content(**content))
+    
+    return ContentResponse(
+        contents=content_list,
+        total=total,
+        page=page,
+        limit=limit
+    )
+
+@api_router.get("/content/featured")
+async def get_featured_content(
+    category: Optional[str] = "trending",  # trending, new_releases, top_rated, by_country
+    country: Optional[str] = None,
+    limit: int = Query(10, ge=1, le=50)
+):
+    """Get featured content for homepage sections"""
+    
+    if category == "trending":
+        # Trending: highest rated content from last 3 months
+        three_months_ago = datetime.utcnow() - timedelta(days=90)
+        cursor = db.content.find({
+            "created_at": {"$gte": three_months_ago}
+        }).sort([("rating", -1), ("created_at", -1)]).limit(limit)
+        
+    elif category == "new_releases":
+        # New releases: recently added content
+        cursor = db.content.find().sort("created_at", -1).limit(limit)
+        
+    elif category == "top_rated":
+        # Top rated: highest rated content overall
+        cursor = db.content.find().sort("rating", -1).limit(limit)
+        
+    elif category == "by_country" and country:
+        # Country specific content
+        cursor = db.content.find({
+            "country": {"$regex": country, "$options": "i"}
+        }).sort([("rating", -1), ("created_at", -1)]).limit(limit)
+        
+    else:
+        # Default to trending
+        cursor = db.content.find().sort([("rating", -1), ("created_at", -1)]).limit(limit)
+    
     contents = await cursor.to_list(length=limit)
     
     content_list = []
