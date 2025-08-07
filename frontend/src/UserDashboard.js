@@ -4,6 +4,8 @@ import UserProfile from './UserProfile';
 import UserStats from './UserStats';
 import AdvancedSearch from './AdvancedSearch';
 import FeaturedSections from './FeaturedSections';
+import WatchlistManager from './WatchlistManager';
+import WatchlistButton from './WatchlistButton';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
