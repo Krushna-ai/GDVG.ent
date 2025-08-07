@@ -180,15 +180,21 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
             Ready to discover amazing content from around the world?
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <button className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 font-medium">
+            <button 
+              onClick={() => setCurrentView('home')}
+              className="px-6 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200 font-medium"
+            >
               Discover New Content
             </button>
-            <button className={`px-6 py-3 rounded-lg transition-colors border ${
-              darkTheme
-                ? 'border-white/20 text-white hover:bg-white/10'
-                : 'border-white/30 text-white hover:bg-white/20'
-            }`}>
-              View My Lists
+            <button 
+              onClick={() => setCurrentView('stats')}
+              className={`px-6 py-3 rounded-lg transition-colors border ${
+                darkTheme
+                  ? 'border-white/20 text-white hover:bg-white/10'
+                  : 'border-white/30 text-white hover:bg-white/20'
+              }`}
+            >
+              View My Stats
             </button>
           </div>
         </div>
