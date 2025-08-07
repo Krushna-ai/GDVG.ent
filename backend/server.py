@@ -397,6 +397,133 @@ def validate_and_convert_row(row: pd.Series) -> Optional[dict]:
 async def root():
     return {"message": "Global Drama Verse Guide API"}
 
+# User Authentication Routes
+@api_router.post("/auth/register", response_model=UserProfile)
+async def register_user(user_data: UserCreate):
+    """User registration"""
+    
+    # Validate email format
+    if not validate_email(user_data.email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    
+    # Validate password strength
+    if not validate_password(user_data.password):
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+    
+    # Check if email already exists
+    existing_user = await db.users.find_one({"email": user_data.email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Check if username already exists
+    existing_username = await db.users.find_one({"username": user_data.username})
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    # Create new user
+    user = User(
+        email=user_data.email,
+        username=user_data.username,
+        password_hash=hash_password(user_data.password),
+        first_name=user_data.first_name,
+        last_name=user_data.last_name,
+        preferences={
+            "theme": "dark",
+            "language": "en",
+            "notifications": {
+                "email": True,
+                "push": True,
+                "social": True
+            }
+        }
+    )
+    
+    # Insert into database
+    await db.users.insert_one(user.dict())
+    
+    # Return user profile (without password)
+    return UserProfile(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        avatar_url=user.avatar_url,
+        bio=user.bio,
+        location=user.location,
+        joined_date=user.joined_date,
+        is_verified=user.is_verified
+    )
+
+@api_router.post("/auth/login", response_model=Token)
+async def login_user(user_data: UserLogin):
+    """User login"""
+    
+    # Find user by email
+    user = await db.users.find_one({"email": user_data.email})
+    
+    if not user or not verify_password(user_data.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+    
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is deactivated"
+        )
+    
+    # Update last login
+    await db.users.update_one(
+        {"id": user["id"]}, 
+        {"$set": {"last_login": datetime.utcnow()}}
+    )
+    
+    # Create access token
+    access_token = create_access_token(data={"sub": user["id"], "type": "user"})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@api_router.get("/auth/me", response_model=UserProfile)
+async def get_current_user_profile(current_user: User = Depends(get_current_user)):
+    """Get current user profile"""
+    return UserProfile(
+        id=current_user.id,
+        email=current_user.email,
+        username=current_user.username,
+        first_name=current_user.first_name,
+        last_name=current_user.last_name,
+        avatar_url=current_user.avatar_url,
+        bio=current_user.bio,
+        location=current_user.location,
+        joined_date=current_user.joined_date,
+        is_verified=current_user.is_verified
+    )
+
+@api_router.get("/users/{username}", response_model=UserProfile)
+async def get_user_profile(username: str):
+    """Get public user profile"""
+    user = await db.users.find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if '_id' in user:
+        del user['_id']
+    
+    user_obj = User(**user)
+    return UserProfile(
+        id=user_obj.id,
+        email=user_obj.email,
+        username=user_obj.username,
+        first_name=user_obj.first_name,
+        last_name=user_obj.last_name,
+        avatar_url=user_obj.avatar_url,
+        bio=user_obj.bio,
+        location=user_obj.location,
+        joined_date=user_obj.joined_date,
+        is_verified=user_obj.is_verified
+    )
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
