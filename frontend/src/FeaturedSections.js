@@ -6,7 +6,7 @@ import { AdSenseNative } from './AdIntegration';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const FeaturedSections = ({ darkTheme, onContentClick }) => {
+const FeaturedSections = ({ darkTheme, onContentClick, showAds = false }) => {
   const [featuredSections, setFeaturedSections] = useState({
     trending: [],
     newReleases: [],
