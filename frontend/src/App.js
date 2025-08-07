@@ -200,8 +200,32 @@ const Header = ({ onSearch, darkTheme, setDarkTheme }) => {
             </form>
           </div>
 
-          {/* Theme Toggle and Admin */}
+          {/* Theme Toggle and User Auth */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setIsLoginMode(true);
+                setShowUserAuth(true);
+              }}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                darkTheme
+                  ? 'text-white hover:bg-gray-900'
+                  : 'text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              Sign In
+            </button>
+            
+            <button
+              onClick={() => {
+                setIsLoginMode(false);
+                setShowUserAuth(true);
+              }}
+              className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
+            >
+              Sign Up
+            </button>
+
             <a
               href="/admin"
               className={`p-2 rounded-lg transition-all duration-200 ${
