@@ -6,6 +6,8 @@ import AdvancedSearch from './AdvancedSearch';
 import FeaturedSections from './FeaturedSections';
 import WatchlistManager from './WatchlistManager';
 import WatchlistButton from './WatchlistButton';
+import ReviewSystem from './ReviewSystem';
+import QuickRating from './QuickRating';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
