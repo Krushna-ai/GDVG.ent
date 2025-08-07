@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import UserProfile from './UserProfile';
 import UserStats from './UserStats';
+import AdvancedSearch from './AdvancedSearch';
+import FeaturedSections from './FeaturedSections';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
