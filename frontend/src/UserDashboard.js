@@ -473,6 +473,15 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
         </main>
       )}
 
+      {currentView === 'watchlist' && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <WatchlistManager 
+            darkTheme={darkTheme} 
+            onContentClick={handleContentClick}
+          />
+        </main>
+      )}
+
       {currentView === 'stats' && (
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <UserStats 
