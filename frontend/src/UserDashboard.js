@@ -56,6 +56,14 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
     setUserProfile(updatedProfile);
   };
 
+  const handleContentClick = (content) => {
+    setSelectedContent(content);
+  };
+
+  const closeContentModal = () => {
+    setSelectedContent(null);
+  };
+
   const UserHeader = () => (
     <header className={`sticky top-0 z-50 backdrop-blur-md border-b transition-all duration-300 ${
       darkTheme 
