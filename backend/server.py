@@ -171,6 +171,27 @@ class ReviewsListResponse(BaseModel):
     limit: int
     avg_rating: Optional[float] = None
 
+# User Analytics Models
+class ViewingHistory(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    content_id: str
+    viewed_at: datetime = Field(default_factory=datetime.utcnow)
+    viewing_duration: Optional[int] = None  # in minutes
+    completion_percentage: Optional[float] = None  # 0-100%
+    device_type: Optional[str] = None  # web, mobile, tablet
+    
+class UserAnalytics(BaseModel):
+    total_content_watched: int
+    total_viewing_time: int  # in minutes
+    completion_rate: float  # percentage
+    favorite_genres: List[dict]  # [{genre: str, count: int}]
+    favorite_countries: List[dict]  # [{country: str, count: int}]
+    viewing_streak: int  # days
+    achievements: List[str]
+    monthly_stats: dict  # viewing stats by month
+    top_rated_content: List[dict]  # user's highest rated content
+
 # Content Models - Add rating info
 class ContentRating(BaseModel):
     average_rating: float
