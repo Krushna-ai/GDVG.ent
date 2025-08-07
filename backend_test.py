@@ -1092,15 +1092,15 @@ class BackendTester:
             return
             
         try:
-            # Test 1: Track basic viewing activity
-            viewing_data = {
+            # Test 1: Track basic viewing activity with query parameters
+            params = {
                 "content_id": self.sample_content_id,
                 "viewing_duration": 45,
                 "completion_percentage": 75.5,
                 "device_type": "web"
             }
             
-            response = self.make_request("POST", "/analytics/view", json=viewing_data)
+            response = self.make_request("POST", "/analytics/view", params=params)
             
             if response.status_code == 200:
                 result = response.json()
@@ -1112,11 +1112,11 @@ class BackendTester:
                 self.log_test("Analytics Track Viewing - Basic", False, f"HTTP {response.status_code}: {response.text}")
             
             # Test 2: Track viewing with minimal data
-            minimal_data = {
+            minimal_params = {
                 "content_id": self.sample_content_id
             }
             
-            response = self.make_request("POST", "/analytics/view", json=minimal_data)
+            response = self.make_request("POST", "/analytics/view", params=minimal_params)
             
             if response.status_code == 200:
                 self.log_test("Analytics Track Viewing - Minimal", True, "Successfully tracked viewing with minimal data")
@@ -1124,12 +1124,12 @@ class BackendTester:
                 self.log_test("Analytics Track Viewing - Minimal", False, f"HTTP {response.status_code}")
             
             # Test 3: Track viewing with invalid content ID
-            invalid_data = {
+            invalid_params = {
                 "content_id": "invalid-content-id-12345",
                 "viewing_duration": 30
             }
             
-            response = self.make_request("POST", "/analytics/view", json=invalid_data)
+            response = self.make_request("POST", "/analytics/view", params=invalid_params)
             
             if response.status_code == 404:
                 self.log_test("Analytics Track Viewing - Invalid Content", True, "Correctly handled invalid content ID")
