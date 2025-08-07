@@ -5,6 +5,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const UserAuth = ({ onLogin, darkTheme, isLogin, setIsLogin }) => {
+  console.log('UserAuth component rendered, isLogin:', isLogin);
   const [formData, setFormData] = useState({
     email: '',
     username: '',
