@@ -711,19 +711,9 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setUserType(null);
-    setCurrentUser(null);
-    localStorage.removeItem('user_token');
-    localStorage.removeItem('admin_token');
-    
-    if (isAdminMode) {
-      // Redirect to main site
-      window.location.href = '/';
-    } else {
-      fetchContents();
-    }
+  const handleAuthClick = (isLogin) => {
+    setIsLoginMode(isLogin);
+    setShowUserAuth(true);
   };
 
   // Admin Mode
