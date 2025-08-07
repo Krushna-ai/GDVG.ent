@@ -1614,6 +1614,305 @@ async def get_monthly_viewing_stats(user_id: str) -> dict:
     
     return monthly_stats
 
+# Day 7: Social Features Core - Models
+class UserFollow(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    follower_id: str  # User who follows
+    following_id: str  # User being followed
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ActivityFeed(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    activity_type: str  # watched, rated, reviewed, added_to_list
+    content_id: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)  # Additional activity data
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    is_public: bool = True
+
+class SocialStats(BaseModel):
+    followers_count: int
+    following_count: int
+    public_reviews: int
+    public_lists: int
+
+# Social Features API Endpoints
+@api_router.post("/social/follow/{username}")
+async def follow_user(
+    username: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Follow another user"""
+    
+    # Find user to follow
+    target_user = await db.users.find_one({"username": username})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if target_user["id"] == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot follow yourself")
+    
+    # Check if already following
+    existing_follow = await db.user_follows.find_one({
+        "follower_id": current_user.id,
+        "following_id": target_user["id"]
+    })
+    
+    if existing_follow:
+        raise HTTPException(status_code=400, detail="Already following this user")
+    
+    # Create follow relationship
+    follow = UserFollow(
+        follower_id=current_user.id,
+        following_id=target_user["id"]
+    )
+    
+    await db.user_follows.insert_one(follow.dict())
+    
+    # Create activity feed entry
+    activity = ActivityFeed(
+        user_id=current_user.id,
+        activity_type="followed_user",
+        metadata={"followed_username": target_user["username"]}
+    )
+    await db.activity_feed.insert_one(activity.dict())
+    
+    return {"message": f"Now following {username}"}
+
+@api_router.delete("/social/unfollow/{username}")
+async def unfollow_user(
+    username: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Unfollow a user"""
+    
+    # Find user to unfollow
+    target_user = await db.users.find_one({"username": username})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Remove follow relationship
+    result = await db.user_follows.delete_one({
+        "follower_id": current_user.id,
+        "following_id": target_user["id"]
+    })
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=400, detail="Not following this user")
+    
+    return {"message": f"Unfollowed {username}"}
+
+@api_router.get("/social/followers/{username}")
+async def get_user_followers(
+    username: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Get user's followers"""
+    skip = (page - 1) * limit
+    
+    # Find user
+    user = await db.users.find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get followers
+    followers = await db.user_follows.aggregate([
+        {"$match": {"following_id": user["id"]}},
+        {"$lookup": {
+            "from": "users",
+            "localField": "follower_id",
+            "foreignField": "id", 
+            "as": "follower"
+        }},
+        {"$unwind": "$follower"},
+        {"$project": {
+            "username": "$follower.username",
+            "avatar_url": "$follower.avatar_url",
+            "is_verified": "$follower.is_verified",
+            "followed_at": "$created_at"
+        }},
+        {"$sort": {"followed_at": -1}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ]).to_list(limit)
+    
+    total = await db.user_follows.count_documents({"following_id": user["id"]})
+    
+    return {
+        "followers": followers,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.get("/social/following/{username}")
+async def get_user_following(
+    username: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Get users that this user follows"""
+    skip = (page - 1) * limit
+    
+    # Find user
+    user = await db.users.find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get following
+    following = await db.user_follows.aggregate([
+        {"$match": {"follower_id": user["id"]}},
+        {"$lookup": {
+            "from": "users",
+            "localField": "following_id",
+            "foreignField": "id",
+            "as": "following"
+        }},
+        {"$unwind": "$following"},
+        {"$project": {
+            "username": "$following.username",
+            "avatar_url": "$following.avatar_url", 
+            "is_verified": "$following.is_verified",
+            "followed_at": "$created_at"
+        }},
+        {"$sort": {"followed_at": -1}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ]).to_list(limit)
+    
+    total = await db.user_follows.count_documents({"follower_id": user["id"]})
+    
+    return {
+        "following": following,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.get("/social/feed")
+async def get_activity_feed(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user)
+):
+    """Get activity feed from followed users"""
+    skip = (page - 1) * limit
+    
+    # Get users that current user follows
+    following_users = await db.user_follows.find({
+        "follower_id": current_user.id
+    }).to_list(None)
+    
+    following_ids = [follow["following_id"] for follow in following_users]
+    following_ids.append(current_user.id)  # Include own activities
+    
+    # Get activities from followed users
+    activities = await db.activity_feed.aggregate([
+        {"$match": {
+            "user_id": {"$in": following_ids},
+            "is_public": True
+        }},
+        {"$lookup": {
+            "from": "users",
+            "localField": "user_id",
+            "foreignField": "id",
+            "as": "user"
+        }},
+        {"$unwind": "$user"},
+        {"$lookup": {
+            "from": "content",
+            "localField": "content_id",
+            "foreignField": "id",
+            "as": "content"
+        }},
+        {"$project": {
+            "activity_type": 1,
+            "metadata": 1,
+            "created_at": 1,
+            "user": {
+                "username": "$user.username",
+                "avatar_url": "$user.avatar_url",
+                "is_verified": "$user.is_verified"
+            },
+            "content": {
+                "$arrayElemAt": [
+                    {
+                        "$map": {
+                            "input": "$content",
+                            "as": "c",
+                            "in": {
+                                "title": "$$c.title",
+                                "poster_url": "$$c.poster_url",
+                                "year": "$$c.year",
+                                "content_type": "$$c.content_type"
+                            }
+                        }
+                    },
+                    0
+                ]
+            }
+        }},
+        {"$sort": {"created_at": -1}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ]).to_list(limit)
+    
+    total = await db.activity_feed.count_documents({
+        "user_id": {"$in": following_ids},
+        "is_public": True
+    })
+    
+    return {
+        "activities": activities,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.get("/social/stats/{username}", response_model=SocialStats)
+async def get_user_social_stats(username: str):
+    """Get user's social statistics"""
+    
+    # Find user
+    user = await db.users.find_one({"username": username})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get followers count
+    followers_count = await db.user_follows.count_documents({"following_id": user["id"]})
+    
+    # Get following count
+    following_count = await db.user_follows.count_documents({"follower_id": user["id"]})
+    
+    # Get public reviews count
+    public_reviews = await db.reviews.count_documents({"user_id": user["id"]})
+    
+    # Get public lists count (completed watchlist items)
+    public_lists = await db.watchlist.count_documents({
+        "user_id": user["id"],
+        "status": "completed"
+    })
+    
+    return SocialStats(
+        followers_count=followers_count,
+        following_count=following_count,
+        public_reviews=public_reviews,
+        public_lists=public_lists
+    )
+
+# Helper function to create activity feed entries
+async def create_activity(user_id: str, activity_type: str, content_id: str = None, metadata: dict = None):
+    """Create an activity feed entry"""
+    activity = ActivityFeed(
+        user_id=user_id,
+        activity_type=activity_type,
+        content_id=content_id,
+        metadata=metadata or {}
+    )
+    
+    await db.activity_feed.insert_one(activity.dict())
+
 # Admin Authentication Routes
 @api_router.post("/admin/login", response_model=Token)
 async def admin_login(admin_data: AdminLogin):
