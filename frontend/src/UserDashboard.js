@@ -533,17 +533,17 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
         <>
           <WelcomeSection />
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="mb-8">
-              <h2 className={`text-3xl font-bold mb-2 ${
-                darkTheme ? 'text-white' : 'text-gray-900'
-              }`}>
-                Trending Now
-              </h2>
-              <p className={`${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                Popular content across all regions and genres
-              </p>
-            </div>
-            <ContentGrid />
+            {homeView === 'featured' ? (
+              <FeaturedSections 
+                darkTheme={darkTheme}
+                onContentClick={handleContentClick}
+              />
+            ) : (
+              <AdvancedSearch 
+                darkTheme={darkTheme}
+                onContentClick={handleContentClick}
+              />
+            )}
           </main>
         </>
       )}
