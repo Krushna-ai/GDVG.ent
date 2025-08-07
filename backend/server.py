@@ -232,6 +232,11 @@ async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        user_type: str = payload.get("type", "user")
+        
+        if user_type != "admin":
+            raise HTTPException(status_code=401, detail="Admin access required")
+            
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     except jwt.PyJWTError:
@@ -242,6 +247,40 @@ async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(
         raise HTTPException(status_code=401, detail="Admin not found")
     
     return AdminUser(**admin)
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user from JWT token"""
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        user_type: str = payload.get("type", "user")
+        
+        if user_type != "user":
+            raise HTTPException(status_code=401, detail="User access required")
+            
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    
+    user = await db.users.find_one({"id": user_id})
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    if '_id' in user:
+        del user['_id']
+    
+    return User(**user)
+
+def validate_email(email: str) -> bool:
+    """Validate email format"""
+    import re
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def validate_password(password: str) -> bool:
+    """Validate password strength (min 6 characters)"""
+    return len(password) >= 6
 
 def parse_excel_csv_file(file_content: bytes, filename: str) -> pd.DataFrame:
     """Parse Excel or CSV file content"""
