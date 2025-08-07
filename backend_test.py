@@ -1640,6 +1640,633 @@ class BackendTester:
             # Restore auth token in case of exception
             self.auth_token = original_token
     
+    # Day 8-9: Enhanced Social Interactions Tests
+    def test_review_like_unlike(self):
+        """Test POST /api/reviews/{review_id}/like - Like/unlike reviews with toggle functionality"""
+        if not self.auth_token:
+            self.log_test("Review Like/Unlike", False, "No auth token available")
+            return
+            
+        try:
+            # First, create a review to like
+            if not self.sample_content_id:
+                self.log_test("Review Like/Unlike", False, "No sample content ID available")
+                return
+                
+            review_data = {
+                "content_id": self.sample_content_id,
+                "rating": 8.5,
+                "title": "Great content for testing",
+                "review_text": "This is a test review for like functionality testing."
+            }
+            
+            review_response = self.make_request("POST", "/reviews", json=review_data)
+            
+            if review_response.status_code == 200:
+                review_id = review_response.json()["id"]
+                
+                # Test 1: Like the review
+                response = self.make_request("POST", f"/reviews/{review_id}/like")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "message" in result and "liked" in result["message"].lower():
+                        self.log_test("Review Like - Success", True, "Successfully liked review")
+                    else:
+                        self.log_test("Review Like - Success", False, "Unexpected response format")
+                else:
+                    self.log_test("Review Like - Success", False, f"HTTP {response.status_code}: {response.text}")
+                
+                # Test 2: Unlike the review (toggle functionality)
+                response = self.make_request("POST", f"/reviews/{review_id}/like")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "message" in result and "unliked" in result["message"].lower():
+                        self.log_test("Review Unlike - Toggle", True, "Successfully toggled like (unliked)")
+                    else:
+                        self.log_test("Review Unlike - Toggle", False, "Toggle functionality not working")
+                else:
+                    self.log_test("Review Unlike - Toggle", False, f"HTTP {response.status_code}")
+                
+                # Test 3: Like again to test toggle back
+                response = self.make_request("POST", f"/reviews/{review_id}/like")
+                
+                if response.status_code == 200:
+                    self.log_test("Review Like - Toggle Back", True, "Successfully toggled back to liked")
+                else:
+                    self.log_test("Review Like - Toggle Back", False, f"HTTP {response.status_code}")
+                
+                # Test 4: Try to like non-existent review
+                response = self.make_request("POST", "/reviews/invalid-review-id-12345/like")
+                
+                if response.status_code == 404:
+                    self.log_test("Review Like - Non-existent Review", True, "Correctly handled non-existent review")
+                else:
+                    self.log_test("Review Like - Non-existent Review", False, f"Expected 404, got {response.status_code}")
+                    
+            elif review_response.status_code == 400 and "already reviewed" in review_response.text:
+                # Review already exists, try to find it and test with existing review
+                reviews_response = self.make_request("GET", f"/reviews?content_id={self.sample_content_id}")
+                if reviews_response.status_code == 200:
+                    reviews = reviews_response.json()["reviews"]
+                    if len(reviews) > 0:
+                        review_id = reviews[0]["id"]
+                        
+                        # Test with existing review
+                        response = self.make_request("POST", f"/reviews/{review_id}/like")
+                        
+                        if response.status_code == 200:
+                            self.log_test("Review Like - Existing Review", True, "Successfully tested like with existing review")
+                        else:
+                            self.log_test("Review Like - Existing Review", False, f"HTTP {response.status_code}")
+                    else:
+                        self.log_test("Review Like/Unlike", False, "No reviews found to test with")
+                else:
+                    self.log_test("Review Like/Unlike", False, "Could not retrieve reviews for testing")
+            else:
+                self.log_test("Review Like/Unlike", False, f"Failed to create test review: HTTP {review_response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Review Like/Unlike", False, f"Exception: {str(e)}")
+    
+    def test_review_likes_list(self):
+        """Test GET /api/reviews/{review_id}/likes - Get users who liked a review with pagination"""
+        try:
+            # Get a review to test with
+            reviews_response = self.make_request("GET", "/reviews?limit=1")
+            
+            if reviews_response.status_code == 200:
+                reviews = reviews_response.json()["reviews"]
+                
+                if len(reviews) > 0:
+                    review_id = reviews[0]["id"]
+                    
+                    # Test 1: Get likes list
+                    response = self.make_request("GET", f"/reviews/{review_id}/likes")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        required_fields = ["likes", "total", "page", "limit"]
+                        
+                        if all(field in data for field in required_fields):
+                            likes = data["likes"]
+                            total = data["total"]
+                            
+                            self.log_test("Review Likes List - Structure", True, f"Retrieved {len(likes)} likes (total: {total})")
+                            
+                            # Verify like structure
+                            if len(likes) > 0:
+                                sample_like = likes[0]
+                                required_like_fields = ["username", "liked_at"]
+                                
+                                if all(field in sample_like for field in required_like_fields):
+                                    self.log_test("Review Likes List - Item Structure", True, "Like items have required fields")
+                                else:
+                                    missing_fields = [f for f in required_like_fields if f not in sample_like]
+                                    self.log_test("Review Likes List - Item Structure", False, f"Missing fields: {missing_fields}")
+                            else:
+                                self.log_test("Review Likes List - Item Structure", True, "No likes to verify structure")
+                                
+                        else:
+                            missing_fields = [f for f in required_fields if f not in data]
+                            self.log_test("Review Likes List - Structure", False, f"Missing response fields: {missing_fields}")
+                    else:
+                        self.log_test("Review Likes List", False, f"HTTP {response.status_code}")
+                    
+                    # Test 2: Test pagination
+                    response = self.make_request("GET", f"/reviews/{review_id}/likes?page=1&limit=5")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data["page"] == 1 and data["limit"] == 5 and len(data["likes"]) <= 5:
+                            self.log_test("Review Likes List - Pagination", True, "Likes pagination working correctly")
+                        else:
+                            self.log_test("Review Likes List - Pagination", False, "Pagination not working correctly")
+                    else:
+                        self.log_test("Review Likes List - Pagination", False, f"HTTP {response.status_code}")
+                    
+                    # Test 3: Non-existent review
+                    response = self.make_request("GET", "/reviews/invalid-review-id-12345/likes")
+                    
+                    if response.status_code == 404:
+                        self.log_test("Review Likes List - Non-existent Review", True, "Correctly handled non-existent review")
+                    else:
+                        self.log_test("Review Likes List - Non-existent Review", False, f"Expected 404, got {response.status_code}")
+                        
+                else:
+                    self.log_test("Review Likes List", False, "No reviews available for testing")
+            else:
+                self.log_test("Review Likes List", False, f"Could not retrieve reviews: HTTP {reviews_response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Review Likes List", False, f"Exception: {str(e)}")
+    
+    def test_review_comments(self):
+        """Test POST /api/reviews/{review_id}/comments - Add comments to reviews with nested reply support"""
+        if not self.auth_token:
+            self.log_test("Review Comments", False, "No auth token available")
+            return
+            
+        try:
+            # Get a review to comment on
+            reviews_response = self.make_request("GET", "/reviews?limit=1")
+            
+            if reviews_response.status_code == 200:
+                reviews = reviews_response.json()["reviews"]
+                
+                if len(reviews) > 0:
+                    review_id = reviews[0]["id"]
+                    
+                    # Test 1: Add a comment to review
+                    comment_data = {
+                        "review_id": review_id,
+                        "comment_text": "This is a test comment on the review."
+                    }
+                    
+                    response = self.make_request("POST", f"/reviews/{review_id}/comments", json=comment_data)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if "id" in result:
+                            comment_id = result["id"]
+                            self.log_test("Review Comments - Add Comment", True, "Successfully added comment to review")
+                            
+                            # Test 2: Add a nested reply to the comment
+                            reply_data = {
+                                "review_id": review_id,
+                                "comment_text": "This is a reply to the comment above.",
+                                "parent_comment_id": comment_id
+                            }
+                            
+                            response = self.make_request("POST", f"/reviews/{review_id}/comments", json=reply_data)
+                            
+                            if response.status_code == 200:
+                                self.log_test("Review Comments - Add Reply", True, "Successfully added nested reply")
+                            else:
+                                self.log_test("Review Comments - Add Reply", False, f"HTTP {response.status_code}")
+                                
+                        else:
+                            self.log_test("Review Comments - Add Comment", False, "No comment ID returned")
+                    else:
+                        self.log_test("Review Comments - Add Comment", False, f"HTTP {response.status_code}: {response.text}")
+                    
+                    # Test 3: Add comment with empty text (should fail)
+                    empty_comment_data = {
+                        "review_id": review_id,
+                        "comment_text": ""
+                    }
+                    
+                    response = self.make_request("POST", f"/reviews/{review_id}/comments", json=empty_comment_data)
+                    
+                    if response.status_code == 400:
+                        self.log_test("Review Comments - Empty Comment", True, "Correctly rejected empty comment")
+                    else:
+                        self.log_test("Review Comments - Empty Comment", False, f"Expected 400, got {response.status_code}")
+                    
+                    # Test 4: Add comment to non-existent review
+                    invalid_comment_data = {
+                        "review_id": "invalid-review-id-12345",
+                        "comment_text": "This should fail."
+                    }
+                    
+                    response = self.make_request("POST", "/reviews/invalid-review-id-12345/comments", json=invalid_comment_data)
+                    
+                    if response.status_code == 404:
+                        self.log_test("Review Comments - Non-existent Review", True, "Correctly handled non-existent review")
+                    else:
+                        self.log_test("Review Comments - Non-existent Review", False, f"Expected 404, got {response.status_code}")
+                        
+                else:
+                    self.log_test("Review Comments", False, "No reviews available for testing")
+            else:
+                self.log_test("Review Comments", False, f"Could not retrieve reviews: HTTP {reviews_response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Review Comments", False, f"Exception: {str(e)}")
+    
+    def test_review_comments_list(self):
+        """Test GET /api/reviews/{review_id}/comments - Get review comments organized in threads"""
+        try:
+            # Get a review to test with
+            reviews_response = self.make_request("GET", "/reviews?limit=1")
+            
+            if reviews_response.status_code == 200:
+                reviews = reviews_response.json()["reviews"]
+                
+                if len(reviews) > 0:
+                    review_id = reviews[0]["id"]
+                    
+                    # Test 1: Get comments list
+                    response = self.make_request("GET", f"/reviews/{review_id}/comments")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        required_fields = ["comments", "total", "page", "limit"]
+                        
+                        if all(field in data for field in required_fields):
+                            comments = data["comments"]
+                            total = data["total"]
+                            
+                            self.log_test("Review Comments List - Structure", True, f"Retrieved {len(comments)} comments (total: {total})")
+                            
+                            # Verify comment structure
+                            if len(comments) > 0:
+                                sample_comment = comments[0]
+                                required_comment_fields = ["id", "user_id", "comment_text", "created_at"]
+                                
+                                if all(field in sample_comment for field in required_comment_fields):
+                                    self.log_test("Review Comments List - Item Structure", True, "Comment items have required fields")
+                                else:
+                                    missing_fields = [f for f in required_comment_fields if f not in sample_comment]
+                                    self.log_test("Review Comments List - Item Structure", False, f"Missing fields: {missing_fields}")
+                            else:
+                                self.log_test("Review Comments List - Item Structure", True, "No comments to verify structure")
+                                
+                        else:
+                            missing_fields = [f for f in required_fields if f not in data]
+                            self.log_test("Review Comments List - Structure", False, f"Missing response fields: {missing_fields}")
+                    else:
+                        self.log_test("Review Comments List", False, f"HTTP {response.status_code}")
+                    
+                    # Test 2: Test pagination
+                    response = self.make_request("GET", f"/reviews/{review_id}/comments?page=1&limit=5")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data["page"] == 1 and data["limit"] == 5 and len(data["comments"]) <= 5:
+                            self.log_test("Review Comments List - Pagination", True, "Comments pagination working correctly")
+                        else:
+                            self.log_test("Review Comments List - Pagination", False, "Pagination not working correctly")
+                    else:
+                        self.log_test("Review Comments List - Pagination", False, f"HTTP {response.status_code}")
+                    
+                    # Test 3: Non-existent review
+                    response = self.make_request("GET", "/reviews/invalid-review-id-12345/comments")
+                    
+                    if response.status_code == 404:
+                        self.log_test("Review Comments List - Non-existent Review", True, "Correctly handled non-existent review")
+                    else:
+                        self.log_test("Review Comments List - Non-existent Review", False, f"Expected 404, got {response.status_code}")
+                        
+                else:
+                    self.log_test("Review Comments List", False, "No reviews available for testing")
+            else:
+                self.log_test("Review Comments List", False, f"Could not retrieve reviews: HTTP {reviews_response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Review Comments List", False, f"Exception: {str(e)}")
+    
+    def test_comment_update_delete(self):
+        """Test PUT /api/comments/{comment_id} and DELETE /api/comments/{comment_id} - Update and delete comments"""
+        if not self.auth_token:
+            self.log_test("Comment Update/Delete", False, "No auth token available")
+            return
+            
+        try:
+            # First, create a comment to update/delete
+            reviews_response = self.make_request("GET", "/reviews?limit=1")
+            
+            if reviews_response.status_code == 200:
+                reviews = reviews_response.json()["reviews"]
+                
+                if len(reviews) > 0:
+                    review_id = reviews[0]["id"]
+                    
+                    # Create a comment
+                    comment_data = {
+                        "review_id": review_id,
+                        "comment_text": "This comment will be updated and then deleted."
+                    }
+                    
+                    comment_response = self.make_request("POST", f"/reviews/{review_id}/comments", json=comment_data)
+                    
+                    if comment_response.status_code == 200:
+                        comment_id = comment_response.json()["id"]
+                        
+                        # Test 1: Update the comment
+                        update_data = {
+                            "comment_text": "This comment has been updated for testing purposes."
+                        }
+                        
+                        response = self.make_request("PUT", f"/comments/{comment_id}", json=update_data)
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if "message" in result:
+                                self.log_test("Comment Update - Success", True, "Successfully updated comment")
+                            else:
+                                self.log_test("Comment Update - Success", False, "Unexpected response format")
+                        else:
+                            self.log_test("Comment Update - Success", False, f"HTTP {response.status_code}: {response.text}")
+                        
+                        # Test 2: Update with empty text (should fail)
+                        empty_update_data = {
+                            "comment_text": ""
+                        }
+                        
+                        response = self.make_request("PUT", f"/comments/{comment_id}", json=empty_update_data)
+                        
+                        if response.status_code == 400:
+                            self.log_test("Comment Update - Empty Text", True, "Correctly rejected empty comment text")
+                        else:
+                            self.log_test("Comment Update - Empty Text", False, f"Expected 400, got {response.status_code}")
+                        
+                        # Test 3: Delete the comment
+                        response = self.make_request("DELETE", f"/comments/{comment_id}")
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            if "message" in result:
+                                self.log_test("Comment Delete - Success", True, "Successfully deleted comment")
+                            else:
+                                self.log_test("Comment Delete - Success", False, "Unexpected response format")
+                        else:
+                            self.log_test("Comment Delete - Success", False, f"HTTP {response.status_code}: {response.text}")
+                        
+                        # Test 4: Try to update deleted comment (should fail)
+                        response = self.make_request("PUT", f"/comments/{comment_id}", json=update_data)
+                        
+                        if response.status_code == 404:
+                            self.log_test("Comment Update - Deleted Comment", True, "Correctly handled update of deleted comment")
+                        else:
+                            self.log_test("Comment Update - Deleted Comment", False, f"Expected 404, got {response.status_code}")
+                        
+                        # Test 5: Try to delete already deleted comment (should fail)
+                        response = self.make_request("DELETE", f"/comments/{comment_id}")
+                        
+                        if response.status_code == 404:
+                            self.log_test("Comment Delete - Already Deleted", True, "Correctly handled deletion of already deleted comment")
+                        else:
+                            self.log_test("Comment Delete - Already Deleted", False, f"Expected 404, got {response.status_code}")
+                            
+                    else:
+                        self.log_test("Comment Update/Delete", False, f"Failed to create test comment: HTTP {comment_response.status_code}")
+                        
+                    # Test 6: Update/delete non-existent comment
+                    response = self.make_request("PUT", "/comments/invalid-comment-id-12345", json={"comment_text": "test"})
+                    
+                    if response.status_code == 404:
+                        self.log_test("Comment Update - Non-existent Comment", True, "Correctly handled non-existent comment update")
+                    else:
+                        self.log_test("Comment Update - Non-existent Comment", False, f"Expected 404, got {response.status_code}")
+                    
+                    response = self.make_request("DELETE", "/comments/invalid-comment-id-12345")
+                    
+                    if response.status_code == 404:
+                        self.log_test("Comment Delete - Non-existent Comment", True, "Correctly handled non-existent comment deletion")
+                    else:
+                        self.log_test("Comment Delete - Non-existent Comment", False, f"Expected 404, got {response.status_code}")
+                        
+                else:
+                    self.log_test("Comment Update/Delete", False, "No reviews available for testing")
+            else:
+                self.log_test("Comment Update/Delete", False, f"Could not retrieve reviews: HTTP {reviews_response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Comment Update/Delete", False, f"Exception: {str(e)}")
+    
+    def test_social_notifications(self):
+        """Test GET /api/social/notifications - Get user notifications (likes, comments, follows)"""
+        if not self.auth_token:
+            self.log_test("Social Notifications", False, "No auth token available")
+            return
+            
+        try:
+            # Test 1: Get notifications
+            response = self.make_request("GET", "/social/notifications")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["notifications", "total", "unread_count", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    notifications = data["notifications"]
+                    total = data["total"]
+                    unread_count = data["unread_count"]
+                    
+                    self.log_test("Social Notifications - Structure", True, f"Retrieved {len(notifications)} notifications (total: {total}, unread: {unread_count})")
+                    
+                    # Verify notification structure
+                    if len(notifications) > 0:
+                        sample_notification = notifications[0]
+                        required_notification_fields = ["id", "type", "created_at", "is_read"]
+                        
+                        if all(field in sample_notification for field in required_notification_fields):
+                            self.log_test("Social Notifications - Item Structure", True, "Notification items have required fields")
+                        else:
+                            missing_fields = [f for f in required_notification_fields if f not in sample_notification]
+                            self.log_test("Social Notifications - Item Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Social Notifications - Item Structure", True, "No notifications to verify structure")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social Notifications - Structure", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Social Notifications", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Test pagination
+            response = self.make_request("GET", "/social/notifications?page=1&limit=5")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data["page"] == 1 and data["limit"] == 5 and len(data["notifications"]) <= 5:
+                    self.log_test("Social Notifications - Pagination", True, "Notifications pagination working correctly")
+                else:
+                    self.log_test("Social Notifications - Pagination", False, "Pagination not working correctly")
+            else:
+                self.log_test("Social Notifications - Pagination", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Filter by unread notifications
+            response = self.make_request("GET", "/social/notifications?unread_only=true")
+            
+            if response.status_code == 200:
+                data = response.json()
+                notifications = data["notifications"]
+                
+                if len(notifications) == 0 or all(not notif.get("is_read", True) for notif in notifications):
+                    self.log_test("Social Notifications - Unread Filter", True, "Unread filter working correctly")
+                else:
+                    self.log_test("Social Notifications - Unread Filter", False, "Unread filter not working correctly")
+            else:
+                self.log_test("Social Notifications - Unread Filter", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social Notifications", False, f"Exception: {str(e)}")
+    
+    def test_social_trending_users(self):
+        """Test GET /api/social/trending-users - Get trending users based on activity and followers"""
+        try:
+            # Test 1: Get trending users
+            response = self.make_request("GET", "/social/trending-users")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["users", "total", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    users = data["users"]
+                    total = data["total"]
+                    
+                    self.log_test("Social Trending Users - Structure", True, f"Retrieved {len(users)} trending users (total: {total})")
+                    
+                    # Verify user structure
+                    if len(users) > 0:
+                        sample_user = users[0]
+                        required_user_fields = ["username", "followers_count", "activity_score"]
+                        
+                        if all(field in sample_user for field in required_user_fields):
+                            self.log_test("Social Trending Users - Item Structure", True, "Trending user items have required fields")
+                        else:
+                            missing_fields = [f for f in required_user_fields if f not in sample_user]
+                            self.log_test("Social Trending Users - Item Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Social Trending Users - Item Structure", True, "No trending users to verify structure")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social Trending Users - Structure", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Social Trending Users", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Test pagination
+            response = self.make_request("GET", "/social/trending-users?page=1&limit=5")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data["page"] == 1 and data["limit"] == 5 and len(data["users"]) <= 5:
+                    self.log_test("Social Trending Users - Pagination", True, "Trending users pagination working correctly")
+                else:
+                    self.log_test("Social Trending Users - Pagination", False, "Pagination not working correctly")
+            else:
+                self.log_test("Social Trending Users - Pagination", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Test time period filter
+            response = self.make_request("GET", "/social/trending-users?period=week")
+            
+            if response.status_code == 200:
+                self.log_test("Social Trending Users - Time Period Filter", True, "Time period filter working")
+            else:
+                self.log_test("Social Trending Users - Time Period Filter", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social Trending Users", False, f"Exception: {str(e)}")
+    
+    def test_social_user_interactions(self):
+        """Test GET /api/social/user-interactions/{username} - Get user's social interactions history"""
+        try:
+            target_username = "social_test_user2"
+            
+            # Test 1: Get user interactions
+            response = self.make_request("GET", f"/social/user-interactions/{target_username}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["interactions", "total", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    interactions = data["interactions"]
+                    total = data["total"]
+                    
+                    self.log_test("Social User Interactions - Structure", True, f"Retrieved {len(interactions)} interactions (total: {total})")
+                    
+                    # Verify interaction structure
+                    if len(interactions) > 0:
+                        sample_interaction = interactions[0]
+                        required_interaction_fields = ["type", "created_at", "metadata"]
+                        
+                        if all(field in sample_interaction for field in required_interaction_fields):
+                            self.log_test("Social User Interactions - Item Structure", True, "Interaction items have required fields")
+                        else:
+                            missing_fields = [f for f in required_interaction_fields if f not in sample_interaction]
+                            self.log_test("Social User Interactions - Item Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Social User Interactions - Item Structure", True, "No interactions to verify structure")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social User Interactions - Structure", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Social User Interactions", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Test pagination
+            response = self.make_request("GET", f"/social/user-interactions/{target_username}?page=1&limit=5")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data["page"] == 1 and data["limit"] == 5 and len(data["interactions"]) <= 5:
+                    self.log_test("Social User Interactions - Pagination", True, "User interactions pagination working correctly")
+                else:
+                    self.log_test("Social User Interactions - Pagination", False, "Pagination not working correctly")
+            else:
+                self.log_test("Social User Interactions - Pagination", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Filter by interaction type
+            response = self.make_request("GET", f"/social/user-interactions/{target_username}?type=like")
+            
+            if response.status_code == 200:
+                data = response.json()
+                interactions = data["interactions"]
+                
+                if len(interactions) == 0 or all(interaction.get("type") == "like" for interaction in interactions):
+                    self.log_test("Social User Interactions - Type Filter", True, "Interaction type filter working correctly")
+                else:
+                    self.log_test("Social User Interactions - Type Filter", False, "Type filter not working correctly")
+            else:
+                self.log_test("Social User Interactions - Type Filter", False, f"HTTP {response.status_code}")
+            
+            # Test 4: Non-existent user
+            response = self.make_request("GET", "/social/user-interactions/nonexistent_user_12345")
+            
+            if response.status_code == 404:
+                self.log_test("Social User Interactions - Non-existent User", True, "Correctly handled non-existent user")
+            else:
+                self.log_test("Social User Interactions - Non-existent User", False, f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social User Interactions", False, f"Exception: {str(e)}")
+    
     def run_all_tests(self):
         """Run all backend tests"""
         print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 6 & 7: Personal Analytics & Social Features")
