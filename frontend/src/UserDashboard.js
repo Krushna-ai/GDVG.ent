@@ -416,13 +416,31 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
               )}
 
               {/* Watchlist Button */}
-              <div className="flex items-center justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-center gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <WatchlistButton 
                   content={content} 
                   darkTheme={darkTheme} 
                   size="lg" 
                 />
+                <div className="text-center">
+                  <div className={`text-sm font-medium mb-1 ${darkTheme ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Quick Rate
+                  </div>
+                  <QuickRating 
+                    content={content} 
+                    darkTheme={darkTheme} 
+                    size="md" 
+                  />
+                </div>
               </div>
+            </div>
+            
+            {/* Reviews Section */}
+            <div className={`border-t ${darkTheme ? 'border-gray-800' : 'border-gray-200'}`}>
+              <ReviewSystem 
+                contentId={content.id} 
+                darkTheme={darkTheme} 
+              />
             </div>
           </div>
         </div>
