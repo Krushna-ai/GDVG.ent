@@ -31,6 +31,8 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
       if (error.response?.status === 401) {
         onLogout();
       }
+    } finally {
+      setLoading(false);
     }
   };
 
