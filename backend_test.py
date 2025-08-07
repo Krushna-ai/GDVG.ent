@@ -1080,6 +1080,566 @@ class BackendTester:
             # Restore auth token in case of exception
             self.auth_token = original_token
     
+    # Day 6: Personal Analytics Tests
+    def test_analytics_track_viewing(self):
+        """Test POST /api/analytics/view - Track user viewing activity"""
+        if not self.auth_token:
+            self.log_test("Analytics Track Viewing", False, "No auth token available")
+            return
+            
+        if not self.sample_content_id:
+            self.log_test("Analytics Track Viewing", False, "No sample content ID available")
+            return
+            
+        try:
+            # Test 1: Track basic viewing activity
+            viewing_data = {
+                "content_id": self.sample_content_id,
+                "viewing_duration": 45,
+                "completion_percentage": 75.5,
+                "device_type": "web"
+            }
+            
+            response = self.make_request("POST", "/analytics/view", json=viewing_data)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "message" in result:
+                    self.log_test("Analytics Track Viewing - Basic", True, "Successfully tracked viewing activity")
+                else:
+                    self.log_test("Analytics Track Viewing - Basic", False, "Unexpected response format")
+            else:
+                self.log_test("Analytics Track Viewing - Basic", False, f"HTTP {response.status_code}: {response.text}")
+            
+            # Test 2: Track viewing with minimal data
+            minimal_data = {
+                "content_id": self.sample_content_id
+            }
+            
+            response = self.make_request("POST", "/analytics/view", json=minimal_data)
+            
+            if response.status_code == 200:
+                self.log_test("Analytics Track Viewing - Minimal", True, "Successfully tracked viewing with minimal data")
+            else:
+                self.log_test("Analytics Track Viewing - Minimal", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Track viewing with invalid content ID
+            invalid_data = {
+                "content_id": "invalid-content-id-12345",
+                "viewing_duration": 30
+            }
+            
+            response = self.make_request("POST", "/analytics/view", json=invalid_data)
+            
+            if response.status_code == 404:
+                self.log_test("Analytics Track Viewing - Invalid Content", True, "Correctly handled invalid content ID")
+            else:
+                self.log_test("Analytics Track Viewing - Invalid Content", False, f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Analytics Track Viewing", False, f"Exception: {str(e)}")
+    
+    def test_analytics_dashboard(self):
+        """Test GET /api/analytics/dashboard - Get comprehensive user analytics"""
+        if not self.auth_token:
+            self.log_test("Analytics Dashboard", False, "No auth token available")
+            return
+            
+        try:
+            response = self.make_request("GET", "/analytics/dashboard")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = [
+                    "total_content_watched", "total_viewing_time", "completion_rate",
+                    "favorite_genres", "favorite_countries", "viewing_streak",
+                    "achievements", "monthly_stats", "top_rated_content"
+                ]
+                
+                if all(field in data for field in required_fields):
+                    self.log_test("Analytics Dashboard - Structure", True, "Dashboard has all required analytics fields")
+                    
+                    # Verify data types and structure
+                    if isinstance(data["total_content_watched"], int) and data["total_content_watched"] >= 0:
+                        self.log_test("Analytics Dashboard - Content Count", True, f"Total content watched: {data['total_content_watched']}")
+                    else:
+                        self.log_test("Analytics Dashboard - Content Count", False, "Invalid total content watched value")
+                    
+                    if isinstance(data["total_viewing_time"], int) and data["total_viewing_time"] >= 0:
+                        self.log_test("Analytics Dashboard - Viewing Time", True, f"Total viewing time: {data['total_viewing_time']} minutes")
+                    else:
+                        self.log_test("Analytics Dashboard - Viewing Time", False, "Invalid total viewing time value")
+                    
+                    if isinstance(data["completion_rate"], (int, float)) and 0 <= data["completion_rate"] <= 100:
+                        self.log_test("Analytics Dashboard - Completion Rate", True, f"Completion rate: {data['completion_rate']}%")
+                    else:
+                        self.log_test("Analytics Dashboard - Completion Rate", False, "Invalid completion rate value")
+                    
+                    if isinstance(data["favorite_genres"], list):
+                        self.log_test("Analytics Dashboard - Favorite Genres", True, f"Found {len(data['favorite_genres'])} favorite genres")
+                    else:
+                        self.log_test("Analytics Dashboard - Favorite Genres", False, "Favorite genres is not a list")
+                    
+                    if isinstance(data["favorite_countries"], list):
+                        self.log_test("Analytics Dashboard - Favorite Countries", True, f"Found {len(data['favorite_countries'])} favorite countries")
+                    else:
+                        self.log_test("Analytics Dashboard - Favorite Countries", False, "Favorite countries is not a list")
+                    
+                    if isinstance(data["viewing_streak"], int) and data["viewing_streak"] >= 0:
+                        self.log_test("Analytics Dashboard - Viewing Streak", True, f"Viewing streak: {data['viewing_streak']} days")
+                    else:
+                        self.log_test("Analytics Dashboard - Viewing Streak", False, "Invalid viewing streak value")
+                    
+                    if isinstance(data["achievements"], list):
+                        self.log_test("Analytics Dashboard - Achievements", True, f"User has {len(data['achievements'])} achievements")
+                    else:
+                        self.log_test("Analytics Dashboard - Achievements", False, "Achievements is not a list")
+                    
+                    if isinstance(data["monthly_stats"], dict):
+                        self.log_test("Analytics Dashboard - Monthly Stats", True, f"Monthly stats for {len(data['monthly_stats'])} months")
+                    else:
+                        self.log_test("Analytics Dashboard - Monthly Stats", False, "Monthly stats is not a dict")
+                    
+                    if isinstance(data["top_rated_content"], list):
+                        self.log_test("Analytics Dashboard - Top Rated Content", True, f"Found {len(data['top_rated_content'])} top rated items")
+                    else:
+                        self.log_test("Analytics Dashboard - Top Rated Content", False, "Top rated content is not a list")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Analytics Dashboard - Structure", False, f"Missing fields: {missing_fields}")
+            else:
+                self.log_test("Analytics Dashboard", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Analytics Dashboard", False, f"Exception: {str(e)}")
+    
+    def test_analytics_history(self):
+        """Test GET /api/analytics/history - Get user's viewing history"""
+        if not self.auth_token:
+            self.log_test("Analytics History", False, "No auth token available")
+            return
+            
+        try:
+            # Test 1: Get viewing history
+            response = self.make_request("GET", "/analytics/history")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["history", "total", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    history = data["history"]
+                    total = data["total"]
+                    
+                    self.log_test("Analytics History - Structure", True, f"Retrieved {len(history)} history items (total: {total})")
+                    
+                    # Verify history item structure
+                    if len(history) > 0:
+                        sample_item = history[0]
+                        required_item_fields = ["user_id", "content_id", "viewed_at", "content"]
+                        
+                        if all(field in sample_item for field in required_item_fields):
+                            self.log_test("Analytics History - Item Structure", True, "History items have required fields including content details")
+                        else:
+                            missing_fields = [f for f in required_item_fields if f not in sample_item]
+                            self.log_test("Analytics History - Item Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Analytics History - Item Structure", True, "No history items to verify (expected for new user)")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Analytics History - Structure", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Analytics History", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Test pagination
+            response = self.make_request("GET", "/analytics/history?page=1&limit=5")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data["page"] == 1 and data["limit"] == 5 and len(data["history"]) <= 5:
+                    self.log_test("Analytics History - Pagination", True, "Pagination working correctly")
+                else:
+                    self.log_test("Analytics History - Pagination", False, "Pagination parameters not respected")
+            else:
+                self.log_test("Analytics History - Pagination", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Analytics History", False, f"Exception: {str(e)}")
+    
+    # Day 7: Social Features Tests
+    def test_social_follow_user(self):
+        """Test POST /api/social/follow/{username} - Follow another user"""
+        if not self.auth_token:
+            self.log_test("Social Follow User", False, "No auth token available")
+            return
+            
+        try:
+            # Create a second test user to follow
+            second_user_data = {
+                "email": "social.test2@example.com",
+                "username": "social_test_user2",
+                "password": "testpass123",
+                "first_name": "Social",
+                "last_name": "TestUser2"
+            }
+            
+            response = self.make_request("POST", "/auth/register", json=second_user_data)
+            
+            if response.status_code == 200 or (response.status_code == 400 and "already registered" in response.text):
+                target_username = second_user_data["username"]
+                
+                # Test 1: Follow the user
+                response = self.make_request("POST", f"/social/follow/{target_username}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "message" in result and target_username in result["message"]:
+                        self.log_test("Social Follow User - Success", True, f"Successfully followed {target_username}")
+                    else:
+                        self.log_test("Social Follow User - Success", False, "Unexpected response format")
+                else:
+                    self.log_test("Social Follow User - Success", False, f"HTTP {response.status_code}: {response.text}")
+                
+                # Test 2: Try to follow the same user again (should fail)
+                response = self.make_request("POST", f"/social/follow/{target_username}")
+                
+                if response.status_code == 400:
+                    self.log_test("Social Follow User - Duplicate", True, "Correctly prevented duplicate follow")
+                else:
+                    self.log_test("Social Follow User - Duplicate", False, f"Expected 400, got {response.status_code}")
+                
+                # Test 3: Try to follow non-existent user
+                response = self.make_request("POST", "/social/follow/nonexistent_user_12345")
+                
+                if response.status_code == 404:
+                    self.log_test("Social Follow User - Non-existent", True, "Correctly handled non-existent user")
+                else:
+                    self.log_test("Social Follow User - Non-existent", False, f"Expected 404, got {response.status_code}")
+                
+                # Test 4: Try to follow yourself (should fail)
+                # Get current user info first
+                me_response = self.make_request("GET", "/auth/me")
+                if me_response.status_code == 200:
+                    my_username = me_response.json()["username"]
+                    response = self.make_request("POST", f"/social/follow/{my_username}")
+                    
+                    if response.status_code == 400:
+                        self.log_test("Social Follow User - Self Follow", True, "Correctly prevented self-follow")
+                    else:
+                        self.log_test("Social Follow User - Self Follow", False, f"Expected 400, got {response.status_code}")
+                        
+            else:
+                self.log_test("Social Follow User", False, f"Failed to create second test user: HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social Follow User", False, f"Exception: {str(e)}")
+    
+    def test_social_unfollow_user(self):
+        """Test DELETE /api/social/unfollow/{username} - Unfollow a user"""
+        if not self.auth_token:
+            self.log_test("Social Unfollow User", False, "No auth token available")
+            return
+            
+        try:
+            target_username = "social_test_user2"
+            
+            # Test 1: Unfollow the user we followed earlier
+            response = self.make_request("DELETE", f"/social/unfollow/{target_username}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "message" in result and target_username in result["message"]:
+                    self.log_test("Social Unfollow User - Success", True, f"Successfully unfollowed {target_username}")
+                else:
+                    self.log_test("Social Unfollow User - Success", False, "Unexpected response format")
+            else:
+                self.log_test("Social Unfollow User - Success", False, f"HTTP {response.status_code}: {response.text}")
+            
+            # Test 2: Try to unfollow the same user again (should fail)
+            response = self.make_request("DELETE", f"/social/unfollow/{target_username}")
+            
+            if response.status_code == 400:
+                self.log_test("Social Unfollow User - Not Following", True, "Correctly handled unfollow of non-followed user")
+            else:
+                self.log_test("Social Unfollow User - Not Following", False, f"Expected 400, got {response.status_code}")
+            
+            # Test 3: Try to unfollow non-existent user
+            response = self.make_request("DELETE", "/social/unfollow/nonexistent_user_12345")
+            
+            if response.status_code == 404:
+                self.log_test("Social Unfollow User - Non-existent", True, "Correctly handled non-existent user")
+            else:
+                self.log_test("Social Unfollow User - Non-existent", False, f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social Unfollow User", False, f"Exception: {str(e)}")
+    
+    def test_social_followers_following(self):
+        """Test GET /api/social/followers/{username} and GET /api/social/following/{username}"""
+        try:
+            target_username = "social_test_user2"
+            
+            # Test 1: Get followers list
+            response = self.make_request("GET", f"/social/followers/{target_username}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["followers", "total", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    followers = data["followers"]
+                    total = data["total"]
+                    
+                    self.log_test("Social Followers List", True, f"Retrieved {len(followers)} followers (total: {total})")
+                    
+                    # Verify follower structure
+                    if len(followers) > 0:
+                        sample_follower = followers[0]
+                        required_follower_fields = ["username", "followed_at"]
+                        
+                        if all(field in sample_follower for field in required_follower_fields):
+                            self.log_test("Social Followers Structure", True, "Follower items have required fields")
+                        else:
+                            missing_fields = [f for f in required_follower_fields if f not in sample_follower]
+                            self.log_test("Social Followers Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Social Followers Structure", True, "No followers to verify structure")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social Followers List", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Social Followers List", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Get following list
+            response = self.make_request("GET", f"/social/following/{target_username}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["following", "total", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    following = data["following"]
+                    total = data["total"]
+                    
+                    self.log_test("Social Following List", True, f"Retrieved {len(following)} following (total: {total})")
+                    
+                    # Verify following structure
+                    if len(following) > 0:
+                        sample_following = following[0]
+                        required_following_fields = ["username", "followed_at"]
+                        
+                        if all(field in sample_following for field in required_following_fields):
+                            self.log_test("Social Following Structure", True, "Following items have required fields")
+                        else:
+                            missing_fields = [f for f in required_following_fields if f not in sample_following]
+                            self.log_test("Social Following Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Social Following Structure", True, "No following to verify structure")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social Following List", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Social Following List", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Test pagination for followers
+            response = self.make_request("GET", f"/social/followers/{target_username}?page=1&limit=5")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data["page"] == 1 and data["limit"] == 5 and len(data["followers"]) <= 5:
+                    self.log_test("Social Followers Pagination", True, "Followers pagination working correctly")
+                else:
+                    self.log_test("Social Followers Pagination", False, "Followers pagination not working correctly")
+            else:
+                self.log_test("Social Followers Pagination", False, f"HTTP {response.status_code}")
+            
+            # Test 4: Test with non-existent user
+            response = self.make_request("GET", "/social/followers/nonexistent_user_12345")
+            
+            if response.status_code == 404:
+                self.log_test("Social Followers Non-existent User", True, "Correctly handled non-existent user")
+            else:
+                self.log_test("Social Followers Non-existent User", False, f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social Followers Following", False, f"Exception: {str(e)}")
+    
+    def test_social_activity_feed(self):
+        """Test GET /api/social/feed - Get activity feed from followed users"""
+        if not self.auth_token:
+            self.log_test("Social Activity Feed", False, "No auth token available")
+            return
+            
+        try:
+            # Test 1: Get activity feed
+            response = self.make_request("GET", "/social/feed")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["activities", "total", "page", "limit"]
+                
+                if all(field in data for field in required_fields):
+                    activities = data["activities"]
+                    total = data["total"]
+                    
+                    self.log_test("Social Activity Feed - Structure", True, f"Retrieved {len(activities)} activities (total: {total})")
+                    
+                    # Verify activity structure
+                    if len(activities) > 0:
+                        sample_activity = activities[0]
+                        required_activity_fields = ["activity_type", "created_at", "user"]
+                        
+                        if all(field in sample_activity for field in required_activity_fields):
+                            self.log_test("Social Activity Feed - Item Structure", True, "Activity items have required fields")
+                            
+                            # Verify user info in activity
+                            user_info = sample_activity["user"]
+                            if "username" in user_info:
+                                self.log_test("Social Activity Feed - User Info", True, "Activity includes user information")
+                            else:
+                                self.log_test("Social Activity Feed - User Info", False, "Activity missing user information")
+                        else:
+                            missing_fields = [f for f in required_activity_fields if f not in sample_activity]
+                            self.log_test("Social Activity Feed - Item Structure", False, f"Missing fields: {missing_fields}")
+                    else:
+                        self.log_test("Social Activity Feed - Item Structure", True, "No activities to verify structure (expected for new user)")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social Activity Feed - Structure", False, f"Missing response fields: {missing_fields}")
+            else:
+                self.log_test("Social Activity Feed", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Test pagination
+            response = self.make_request("GET", "/social/feed?page=1&limit=10")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data["page"] == 1 and data["limit"] == 10 and len(data["activities"]) <= 10:
+                    self.log_test("Social Activity Feed - Pagination", True, "Activity feed pagination working correctly")
+                else:
+                    self.log_test("Social Activity Feed - Pagination", False, "Activity feed pagination not working correctly")
+            else:
+                self.log_test("Social Activity Feed - Pagination", False, f"HTTP {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social Activity Feed", False, f"Exception: {str(e)}")
+    
+    def test_social_user_stats(self):
+        """Test GET /api/social/stats/{username} - Get user's social statistics"""
+        try:
+            target_username = "social_test_user2"
+            
+            # Test 1: Get social stats for existing user
+            response = self.make_request("GET", f"/social/stats/{target_username}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["followers_count", "following_count", "public_reviews", "public_lists"]
+                
+                if all(field in data for field in required_fields):
+                    self.log_test("Social User Stats - Structure", True, "Social stats have all required fields")
+                    
+                    # Verify data types
+                    if all(isinstance(data[field], int) and data[field] >= 0 for field in required_fields):
+                        stats_summary = f"Followers: {data['followers_count']}, Following: {data['following_count']}, Reviews: {data['public_reviews']}, Lists: {data['public_lists']}"
+                        self.log_test("Social User Stats - Values", True, f"Valid stats values - {stats_summary}")
+                    else:
+                        self.log_test("Social User Stats - Values", False, "Invalid stats values (should be non-negative integers)")
+                        
+                else:
+                    missing_fields = [f for f in required_fields if f not in data]
+                    self.log_test("Social User Stats - Structure", False, f"Missing fields: {missing_fields}")
+            else:
+                self.log_test("Social User Stats", False, f"HTTP {response.status_code}")
+            
+            # Test 2: Get stats for current user
+            me_response = self.make_request("GET", "/auth/me")
+            if me_response.status_code == 200:
+                my_username = me_response.json()["username"]
+                response = self.make_request("GET", f"/social/stats/{my_username}")
+                
+                if response.status_code == 200:
+                    self.log_test("Social User Stats - Own Stats", True, "Successfully retrieved own social stats")
+                else:
+                    self.log_test("Social User Stats - Own Stats", False, f"HTTP {response.status_code}")
+            
+            # Test 3: Get stats for non-existent user
+            response = self.make_request("GET", "/social/stats/nonexistent_user_12345")
+            
+            if response.status_code == 404:
+                self.log_test("Social User Stats - Non-existent User", True, "Correctly handled non-existent user")
+            else:
+                self.log_test("Social User Stats - Non-existent User", False, f"Expected 404, got {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Social User Stats", False, f"Exception: {str(e)}")
+    
+    def test_social_unauthorized_access(self):
+        """Test social endpoints without authentication where required"""
+        try:
+            # Temporarily remove auth token
+            original_token = self.auth_token
+            self.auth_token = None
+            
+            # Test 1: Follow endpoint without auth (should fail)
+            response = self.make_request("POST", "/social/follow/test_user")
+            
+            if response.status_code == 401:
+                self.log_test("Social Unauthorized - Follow", True, "Correctly blocked unauthorized follow")
+            else:
+                self.log_test("Social Unauthorized - Follow", False, f"Expected 401, got {response.status_code}")
+            
+            # Test 2: Unfollow endpoint without auth (should fail)
+            response = self.make_request("DELETE", "/social/unfollow/test_user")
+            
+            if response.status_code == 401:
+                self.log_test("Social Unauthorized - Unfollow", True, "Correctly blocked unauthorized unfollow")
+            else:
+                self.log_test("Social Unauthorized - Unfollow", False, f"Expected 401, got {response.status_code}")
+            
+            # Test 3: Activity feed without auth (should fail)
+            response = self.make_request("GET", "/social/feed")
+            
+            if response.status_code == 401:
+                self.log_test("Social Unauthorized - Feed", True, "Correctly blocked unauthorized feed access")
+            else:
+                self.log_test("Social Unauthorized - Feed", False, f"Expected 401, got {response.status_code}")
+            
+            # Test 4: Public endpoints should work without auth
+            response = self.make_request("GET", "/social/followers/social_test_user2")
+            
+            if response.status_code == 200:
+                self.log_test("Social Public - Followers", True, "Followers list accessible without auth")
+            else:
+                self.log_test("Social Public - Followers", False, f"Expected 200, got {response.status_code}")
+            
+            response = self.make_request("GET", "/social/following/social_test_user2")
+            
+            if response.status_code == 200:
+                self.log_test("Social Public - Following", True, "Following list accessible without auth")
+            else:
+                self.log_test("Social Public - Following", False, f"Expected 200, got {response.status_code}")
+            
+            response = self.make_request("GET", "/social/stats/social_test_user2")
+            
+            if response.status_code == 200:
+                self.log_test("Social Public - Stats", True, "User stats accessible without auth")
+            else:
+                self.log_test("Social Public - Stats", False, f"Expected 200, got {response.status_code}")
+            
+            # Restore auth token
+            self.auth_token = original_token
+            
+        except Exception as e:
+            self.log_test("Social Unauthorized Access", False, f"Exception: {str(e)}")
+            # Restore auth token in case of exception
+            self.auth_token = original_token
+    
     def run_all_tests(self):
         """Run all backend tests"""
         print(f"🚀 Starting Backend API Tests for Global Drama Verse Guide - Day 4 Watchlist System")
