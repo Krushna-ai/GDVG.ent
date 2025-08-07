@@ -478,6 +478,16 @@ const ReviewSystem = ({ contentId, darkTheme }) => {
             {review.total_votes || 0} total votes
           </span>
         </div>
+
+        {/* Social Interactions */}
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <ReviewInteractions 
+            reviewId={review.id}
+            darkTheme={darkTheme}
+            initialLikeCount={review.like_count || 0}
+            initialCommentCount={review.comment_count || 0}
+          />
+        </div>
       </div>
     );
   };
