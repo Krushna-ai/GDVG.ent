@@ -749,15 +749,13 @@ function App() {
 
   // User Authentication Modal
   if (showUserAuth) {
-    console.log('Rendering UserAuth modal, isLoginMode:', isLoginMode);
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="bg-white p-8 rounded-lg">
-          <h2>AUTH MODAL TEST</h2>
-          <p>Login Mode: {isLoginMode ? 'true' : 'false'}</p>
-          <button onClick={() => setShowUserAuth(false)}>Close</button>
-        </div>
-      </div>
+      <UserAuth 
+        onLogin={handleLogin} 
+        darkTheme={darkTheme} 
+        isLogin={isLoginMode}
+        setIsLogin={setIsLoginMode}
+      />
     );
   }
 
