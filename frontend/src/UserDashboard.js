@@ -10,6 +10,8 @@ import ReviewSystem from './ReviewSystem';
 import QuickRating from './QuickRating';
 import PersonalAnalytics from './PersonalAnalytics';
 import SocialFeatures from './SocialFeatures';
+import SocialInteractions from './SocialInteractions';
+import ReviewInteractions from './ReviewInteractions';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
