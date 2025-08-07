@@ -508,11 +508,18 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
       {currentView === 'home' && (
         <>
           <WelcomeSection />
+          {/* Top Content Ad for Free Users */}
+          {shouldShowAds && (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <AdSenseBanner slot="banner_top" size="728x90" className="mb-6" />
+            </div>
+          )}
           <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             {homeView === 'featured' ? (
               <FeaturedSections 
                 darkTheme={darkTheme}
                 onContentClick={handleContentClick}
+                showAds={shouldShowAds}
               />
             ) : (
               <AdvancedSearch 
@@ -521,6 +528,12 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
               />
             )}
           </main>
+          {/* Bottom Ad for Free Users */}
+          {shouldShowAds && (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+              <AdSenseBanner slot="banner_bottom" size="728x90" />
+            </div>
+          )}
         </>
       )}
 
