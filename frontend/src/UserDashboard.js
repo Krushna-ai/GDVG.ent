@@ -21,7 +21,7 @@ const API = `${BACKEND_URL}/api`;
 const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('home'); // 'home', 'profile', 'stats', 'watchlist', 'analytics', 'social'
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'profile', 'stats', 'watchlist', 'analytics', 'social', 'recommendations', 'premium'
   const [homeView, setHomeView] = useState('featured'); // 'featured', 'search'
   const [selectedContent, setSelectedContent] = useState(null);
 
