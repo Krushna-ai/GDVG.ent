@@ -5,6 +5,7 @@ import AdminLogin from './AdminLogin';
 import AdminDashboard from './AdminDashboard';
 import UserAuth from './UserAuth';
 import UserDashboard from './UserDashboard';
+import Footer from './Footer';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
