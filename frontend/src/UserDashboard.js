@@ -558,12 +558,15 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
       )}
 
       {currentView === 'analytics' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <PersonalAnalytics 
-            darkTheme={darkTheme} 
-            currentUser={userProfile}
-          />
-        </main>
+        <>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <PersonalAnalytics 
+              darkTheme={darkTheme} 
+              currentUser={userProfile}
+            />
+          </main>
+          <Footer darkTheme={darkTheme} />
+        </>
       )}
 
       {currentView === 'recommendations' && (
