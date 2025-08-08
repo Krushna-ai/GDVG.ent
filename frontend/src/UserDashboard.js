@@ -546,12 +546,15 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
       )}
 
       {currentView === 'watchlist' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <WatchlistManager 
-            darkTheme={darkTheme} 
-            onContentClick={handleContentClick}
-          />
-        </main>
+        <>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <WatchlistManager 
+              darkTheme={darkTheme} 
+              onContentClick={handleContentClick}
+            />
+          </main>
+          <Footer darkTheme={darkTheme} />
+        </>
       )}
 
       {currentView === 'analytics' && (
