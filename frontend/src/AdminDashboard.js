@@ -272,17 +272,20 @@ const AdminDashboard = ({ darkTheme, onLogout }) => {
   };
 
   return (
-    <div className={`min-h-screen flex ${
+    <div className={`min-h-screen flex flex-col ${
       darkTheme ? 'bg-black' : 'bg-gray-50'
     }`}>
-      <Sidebar />
-      
-      <div className="flex-1 p-8 overflow-auto">
-        {currentSection === 'dashboard' && <DashboardContent />}
-        {currentSection === 'content' && (
-          <ContentManagement darkTheme={darkTheme} onStatsUpdate={fetchStats} />
-        )}
+      <div className="flex flex-1">
+        <Sidebar />
+        
+        <div className="flex-1 p-8 overflow-auto">
+          {currentSection === 'dashboard' && <DashboardContent />}
+          {currentSection === 'content' && (
+            <ContentManagement darkTheme={darkTheme} onStatsUpdate={fetchStats} />
+          )}
+        </div>
       </div>
+      <Footer darkTheme={darkTheme} />
     </div>
   );
 };
