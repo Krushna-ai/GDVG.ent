@@ -529,6 +529,7 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
               />
             )}
           </main>
+          <Footer darkTheme={darkTheme} />
         </>
       )}
 
