@@ -15,6 +15,7 @@ import ReviewInteractions from './ReviewInteractions';
 import SmartRecommendations from './SmartRecommendations';
 import PremiumFeatures from './PremiumFeatures';
 import { AdSenseBanner, useAdManagement } from './AdIntegration';
+import Footer from './Footer';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
