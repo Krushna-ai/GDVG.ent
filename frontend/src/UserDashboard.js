@@ -533,13 +533,16 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
       )}
 
       {currentView === 'profile' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <UserProfile 
-            darkTheme={darkTheme} 
-            currentUser={userProfile} 
-            onProfileUpdate={handleProfileUpdate}
-          />
-        </main>
+        <>
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <UserProfile 
+              darkTheme={darkTheme} 
+              currentUser={userProfile} 
+              onProfileUpdate={handleProfileUpdate}
+            />
+          </main>
+          <Footer darkTheme={darkTheme} />
+        </>
       )}
 
       {currentView === 'watchlist' && (
