@@ -147,17 +147,39 @@ const BulkImport = ({ darkTheme, onImportComplete }) => {
     }
   };
 
-  const getTemplate = async () => {
-    try {
-      const token = localStorage.getItem('admin_token');
-      const response = await axios.get(`${API}/admin/bulk-import/template`, {
-        headers: { Authorization: `Bearer ${token}` }
+  const downloadTemplate = (withSamples = false) => {
+    const headers = [
+      'title', 'original_title', 'synopsis', 'year', 'country', 'content_type',
+      'genres', 'rating', 'episodes', 'duration', 'cast', 'crew', 
+      'streaming_platforms', 'tags', 'poster_url', 'banner_url'
+    ];
+    
+    let csvContent = headers.join(',') + '\n';
+    
+    if (withSamples) {
+      sampleData.forEach(row => {
+        const csvRow = headers.map(header => {
+          const value = row[header] || '';
+          // Escape commas and quotes in CSV
+          return `"${String(value).replace(/"/g, '""')}"`;
+        }).join(',');
+        csvContent += csvRow + '\n';
       });
-      
-      // Create CSV content from template data
-      const template = response.data.sample_data;
-      const headers = Object.keys(template);
-      const rows = [];
+    } else {
+      // Add empty row for template structure
+      csvContent += headers.map(() => '""').join(',') + '\n';
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', withSamples ? 'content_template_with_samples.csv' : 'content_template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
       
       // Get max length of arrays to handle all sample data
       const maxRows = Math.max(...Object.values(template).map(arr => arr.length));
