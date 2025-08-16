@@ -9,20 +9,101 @@ const BulkImport = ({ darkTheme, onImportComplete }) => {
   const [uploading, setUploading] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [showTemplate, setShowTemplate] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  // Sample data for quick template generation
+  const sampleData = [
+    {
+      title: "Squid Game",
+      original_title: "오징어 게임",
+      synopsis: "Hundreds of cash-strapped players accept a strange invitation to compete in children's games for a tempting prize.",
+      year: 2021,
+      country: "South Korea",
+      content_type: "series",
+      genres: "thriller,drama,mystery",
+      rating: 8.0,
+      episodes: 9,
+      duration: 60,
+      cast: "Lee Jung-jae,Park Hae-soo,Wi Ha-jun",
+      crew: "Hwang Dong-hyuk (Director)",
+      streaming_platforms: "Netflix",
+      tags: "survival,psychological,korean",
+      poster_url: "",
+      banner_url: ""
+    },
+    {
+      title: "Your Name", 
+      original_title: "君の名は。",
+      synopsis: "Two teenagers share a profound, magical connection upon discovering they are swapping bodies.",
+      year: 2016,
+      country: "Japan",
+      content_type: "movie", 
+      genres: "romance,drama,supernatural",
+      rating: 8.4,
+      episodes: null,
+      duration: 106,
+      cast: "Ryunosuke Kamiki,Mone Kamishiraishi",
+      crew: "Makoto Shinkai (Director)",
+      streaming_platforms: "Crunchyroll,Funimation",
+      tags: "anime,body-swap,supernatural",
+      poster_url: "",
+      banner_url: ""
+    },
+    {
+      title: "Money Heist",
+      original_title: "La Casa de Papel", 
+      synopsis: "An unusual group of robbers attempt to carry out the most perfect robbery in Spanish history.",
+      year: 2017,
+      country: "Spain",
+      content_type: "series",
+      genres: "crime,thriller,drama",
+      rating: 8.2,
+      episodes: 41,
+      duration: 70,
+      cast: "Úrsula Corberó,Álvaro Morte,Itziar Ituño",
+      crew: "Álex Pina (Creator)",
+      streaming_platforms: "Netflix",
+      tags: "heist,spanish,crime",
+      poster_url: "",
+      banner_url: ""
+    }
+  ];
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
-                         'application/vnd.ms-excel', 'text/csv'];
-      
-      if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-        setSelectedFile(file);
-        setImportResult(null);
-      } else {
-        alert('Please select a valid Excel (.xlsx, .xls) or CSV (.csv) file');
-        e.target.value = '';
-      }
+      validateAndSetFile(file);
+    }
+  };
+
+  const validateAndSetFile = (file) => {
+    const validTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                       'application/vnd.ms-excel', 'text/csv'];
+    
+    if (validTypes.includes(file.type) || file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      setSelectedFile(file);
+      setImportResult(null);
+    } else {
+      alert('Please select a valid Excel (.xlsx, .xls) or CSV (.csv) file');
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      validateAndSetFile(file);
     }
   };
 
