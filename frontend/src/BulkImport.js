@@ -180,40 +180,6 @@ const BulkImport = ({ darkTheme, onImportComplete }) => {
     link.click();
     document.body.removeChild(link);
   };
-      
-      // Get max length of arrays to handle all sample data
-      const maxRows = Math.max(...Object.values(template).map(arr => arr.length));
-      
-      for (let i = 0; i < maxRows; i++) {
-        const row = headers.map(header => {
-          const value = template[header][i];
-          return value !== null && value !== undefined ? value : '';
-        });
-        rows.push(row);
-      }
-      
-      // Create CSV content
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-      ].join('\n');
-      
-      // Download CSV file
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'gdvg_bulk_import_template.csv';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-    } catch (error) {
-      console.error('Error downloading template:', error);
-      alert('Error downloading template');
-    }
-  };
 
   const resetUpload = () => {
     setSelectedFile(null);
