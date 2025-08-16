@@ -92,7 +92,7 @@ const FeaturedSections = ({ darkTheme, handleContentClick, showAds = false }) =>
               className={`flex-shrink-0 w-48 group cursor-pointer transition-all duration-300 transform hover:scale-105 ${
                 darkTheme ? 'hover:shadow-2xl' : 'hover:shadow-xl'
               }`}
-              onClick={() => onContentClick(content)}
+              onClick={() => handleContentClick(content)}
             >
               <div className={`rounded-xl overflow-hidden transition-all duration-300 ${
                 darkTheme 
