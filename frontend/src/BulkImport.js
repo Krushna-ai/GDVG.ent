@@ -296,7 +296,7 @@ const BulkImport = ({ darkTheme, onImportComplete }) => {
             </div>
 
             <button
-              onClick={getTemplate}
+              onClick={() => downloadTemplate(true)}
               className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-200"
             >
               Download Sample Template
