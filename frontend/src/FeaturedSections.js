@@ -205,7 +205,7 @@ const FeaturedSections = ({ darkTheme, handleContentClick, showAds = false }) =>
               
               <div className="flex flex-wrap gap-4">
                 <button 
-                  onClick={() => onContentClick(heroContent)}
+                  onClick={() => handleContentClick(heroContent)}
                   className="px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-all duration-200 font-medium"
                 >
                   <svg className="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
