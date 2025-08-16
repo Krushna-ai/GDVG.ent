@@ -65,8 +65,10 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
     setUserProfile(updatedProfile);
   };
 
+  // Handle content click with navigation
   const handleContentClick = (content) => {
-    setSelectedContent(content);
+    const titleSlug = formatTitleForUrl(content.title);
+    navigate(`/content/${content._id}/${titleSlug}`);
   };
 
   const closeContentModal = () => {
