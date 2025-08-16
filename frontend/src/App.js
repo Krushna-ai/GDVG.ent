@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import axios from 'axios';
+import { supabase } from './supabaseClient';
 
 import HomePage from './pages/HomePage';
 import AdminLogin from './AdminLogin';
@@ -11,65 +12,65 @@ import UserAuth from './UserAuth';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Axios interceptor to add the Supabase token to requests
+axios.interceptors.request.use(
+  async (config) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      config.headers.Authorization = `Bearer ${session.access_token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 function App() {
   const [darkTheme, setDarkTheme] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userType, setUserType] = useState(null); // 'admin' or 'user'
+  const [session, setSession] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  const [showUserAuth, setShowUserAuth] = useState(false);
-  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     document.title = 'GDVG - Global Drama Verse Guide';
     
-    // Check for admin token
-    const adminToken = localStorage.getItem('admin_token');
-    if (adminToken) {
-      setIsAuthenticated(true);
-      setUserType('admin');
-      return;
-    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setLoading(false);
+    });
 
-    // Check for user token
-    const userToken = localStorage.getItem('user_token');
-    if (userToken) {
-      fetchUserProfile(userToken);
-    }
+    return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserProfile = async (token) => {
+  useEffect(() => {
+    if (session) {
+      fetchUserProfile();
+    } else {
+      setCurrentUser(null);
+    }
+  }, [session]);
+
+  const fetchUserProfile = async () => {
     try {
-      const response = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCurrentUser(response.data);
-      setIsAuthenticated(true);
-      setUserType('user');
+      const { data, error } = await axios.get(`${API}/auth/me`);
+      if (error) throw error;
+      setCurrentUser(data);
     } catch (error) {
       console.error('Error fetching user profile:', error);
       handleLogout();
     }
   };
 
-  const handleLogin = (token, type) => {
-    if (type === 'admin') {
-      localStorage.setItem('admin_token', token);
-      setIsAuthenticated(true);
-      setUserType('admin');
-    } else {
-      localStorage.setItem('user_token', token);
-      fetchUserProfile(token);
-    }
-    setShowUserAuth(false);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setSession(null);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user_token');
-    localStorage.removeItem('admin_token');
-    setIsAuthenticated(false);
-    setUserType(null);
-    setCurrentUser(null);
-  };
+  if (loading) {
+    return <div>Loading...</div>
+  }
 
   return (
     <Router>
@@ -77,31 +78,43 @@ function App() {
         <Route
           path="/"
           element={
-            <HomePage
-              darkTheme={darkTheme}
-              setDarkTheme={setDarkTheme}
-              onAuthClick={() => {}}
-            />
+            !session ? (
+              <UserAuth darkTheme={darkTheme} isLogin={true} setIsLogin={() => {}} />
+            ) : (
+              <HomePage
+                darkTheme={darkTheme}
+                setDarkTheme={setDarkTheme}
+                onAuthClick={handleLogout}
+                isAuthenticated={!!session}
+              />
+            )
           }
+        />
+        <Route
+          path="/login"
+          element={<UserAuth darkTheme={darkTheme} isLogin={true} setIsLogin={() => {}} />}
+        />
+        <Route
+          path="/register"
+          element={<UserAuth darkTheme={darkTheme} isLogin={false} setIsLogin={() => {}} />}
         />
         <Route
           path="/admin"
           element={
-            isAuthenticated && userType === 'admin'
-              ? <AdminDashboard darkTheme={darkTheme} onLogout={handleLogout} />
-              : <Navigate to="/admin/login" />
+            // Admin auth is not implemented yet
+            <Navigate to="/admin/login" />
           }
         />
         <Route
           path="/admin/login"
-          element={<AdminLogin onLogin={(token) => handleLogin(token, 'admin')} darkTheme={darkTheme} />}
+          element={<AdminLogin onLogin={() => {}} darkTheme={darkTheme} />}
         />
         <Route
           path="/dashboard"
           element={
-            isAuthenticated && userType === 'user'
+            session
               ? <UserDashboard darkTheme={darkTheme} onLogout={handleLogout} currentUser={currentUser} />
-              : <Navigate to="/" />
+              : <Navigate to="/login" />
           }
         />
         {/* Add other routes here as they are built */}

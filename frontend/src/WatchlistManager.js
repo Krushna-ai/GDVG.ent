@@ -33,7 +33,6 @@ const WatchlistManager = ({ darkTheme, onContentClick }) => {
   const fetchWatchlist = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('user_token');
       const params = new URLSearchParams();
       
       if (statusFilter !== 'all') {
@@ -42,9 +41,7 @@ const WatchlistManager = ({ darkTheme, onContentClick }) => {
       params.append('page', currentPage);
       params.append('limit', 20);
 
-      const response = await axios.get(`${API}/watchlist?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get(`${API}/watchlist?${params}`);
 
       setWatchlistItems(response.data.items);
       setTotalItems(response.data.total);
@@ -59,16 +56,13 @@ const WatchlistManager = ({ darkTheme, onContentClick }) => {
 
   const updateItemStatus = async (itemId, newStatus, progress = null) => {
     try {
-      const token = localStorage.getItem('user_token');
       const updateData = { status: newStatus };
       
       if (progress !== null) {
         updateData.progress = progress;
       }
 
-      await axios.put(`${API}/watchlist/${itemId}`, updateData, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.put(`${API}/watchlist/${itemId}`, updateData);
 
       // Refresh the list
       fetchWatchlist();
@@ -79,10 +73,7 @@ const WatchlistManager = ({ darkTheme, onContentClick }) => {
 
   const removeFromWatchlist = async (itemId) => {
     try {
-      const token = localStorage.getItem('user_token');
-      await axios.delete(`${API}/watchlist/${itemId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.delete(`${API}/watchlist/${itemId}`);
 
       // Refresh the list
       fetchWatchlist();

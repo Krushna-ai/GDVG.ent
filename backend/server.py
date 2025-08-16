@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Query, Depends, status, U
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 import os
 import logging
 from pathlib import Path
@@ -21,10 +21,10 @@ import json
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Supabase connection
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
 
 # JWT Settings
 SECRET_KEY = os.environ.get('JWT_SECRET', 'gdvg-secret-key-2025')
@@ -70,22 +70,6 @@ class AdminUser(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 # User Models
-class User(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: str
-    username: str
-    password_hash: str
-    first_name: str
-    last_name: str
-    avatar_url: Optional[str] = None
-    bio: Optional[str] = None
-    location: Optional[str] = None
-    is_verified: bool = False
-    is_active: bool = True
-    joined_date: datetime = Field(default_factory=datetime.utcnow)
-    last_login: Optional[datetime] = None
-    preferences: dict = Field(default_factory=dict)
-
 class UserCreate(BaseModel):
     email: str
     username: str
@@ -338,66 +322,18 @@ class ContentResponse(BaseModel):
     limit: int
 
 # Authentication Functions
-def hash_password(password: str) -> str:
-    """Hash password using SHA-256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user from Supabase JWT token"""
+    try:
+        user = supabase.auth.get_user(credentials.credentials)
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
-def verify_password(password: str, hashed_password: str) -> bool:
-    """Verify password against hash"""
-    return hash_password(password) == hashed_password
-
-def create_access_token(data: dict):
-    """Create JWT access token"""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
+# This is a placeholder for admin auth. For now, it will do nothing.
 async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current admin user from JWT token"""
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        user_type: str = payload.get("type", "user")
-        
-        if user_type != "admin":
-            raise HTTPException(status_code=401, detail="Admin access required")
-            
-        if username is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    
-    admin = await db.admins.find_one({"username": username})
-    if admin is None:
-        raise HTTPException(status_code=401, detail="Admin not found")
-    
-    return AdminUser(**admin)
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Get current user from JWT token"""
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        user_type: str = payload.get("type", "user")
-        
-        if user_type != "user":
-            raise HTTPException(status_code=401, detail="User access required")
-            
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    
-    user = await db.users.find_one({"id": user_id})
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-    
-    if '_id' in user:
-        del user['_id']
-    
-    return User(**user)
+    return None
 
 def validate_email(email: str) -> bool:
     """Validate email format"""
@@ -528,260 +464,157 @@ async def root():
 @api_router.post("/auth/register", response_model=UserProfile)
 async def register_user(user_data: UserCreate):
     """User registration"""
-    
-    # Validate email format
-    if not validate_email(user_data.email):
-        raise HTTPException(status_code=400, detail="Invalid email format")
-    
-    # Validate password strength
-    if not validate_password(user_data.password):
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
-    
-    # Check if email already exists
-    existing_user = await db.users.find_one({"email": user_data.email})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Check if username already exists
-    existing_username = await db.users.find_one({"username": user_data.username})
-    if existing_username:
-        raise HTTPException(status_code=400, detail="Username already taken")
-    
-    # Create new user
-    user = User(
-        email=user_data.email,
-        username=user_data.username,
-        password_hash=hash_password(user_data.password),
-        first_name=user_data.first_name,
-        last_name=user_data.last_name,
-        preferences={
-            "theme": "dark",
-            "language": "en",
-            "notifications": {
-                "email": True,
-                "push": True,
-                "social": True
+    try:
+        # Create user in Supabase Auth
+        user_response = supabase.auth.admin.create_user({
+            "email": user_data.email,
+            "password": user_data.password,
+            "options": {
+                "data": {
+                    "username": user_data.username,
+                    "first_name": user_data.first_name,
+                    "last_name": user_data.last_name,
+                }
             }
-        }
-    )
-    
-    # Insert into database
-    await db.users.insert_one(user.dict())
-    
-    # Return user profile (without password)
-    return UserProfile(
-        id=user.id,
-        email=user.email,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        avatar_url=user.avatar_url,
-        bio=user.bio,
-        location=user.location,
-        joined_date=user.joined_date,
-        is_verified=user.is_verified
-    )
+        })
 
-@api_router.post("/auth/login", response_model=Token)
-async def login_user(user_data: UserLogin):
-    """User login"""
-    
-    # Find user by email
-    user = await db.users.find_one({"email": user_data.email})
-    
-    if not user or not verify_password(user_data.password, user["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
-    
-    if not user.get("is_active", True):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Account is deactivated"
-        )
-    
-    # Update last login
-    await db.users.update_one(
-        {"id": user["id"]}, 
-        {"$set": {"last_login": datetime.utcnow()}}
-    )
-    
-    # Create access token
-    access_token = create_access_token(data={"sub": user["id"], "type": "user"})
-    return {"access_token": access_token, "token_type": "bearer"}
+        # The 'profiles' table should be updated by a trigger in Supabase.
+        # We can fetch the profile data to be sure.
+        profile_data = supabase.table("profiles").select("*").eq("id", user_response.user.id).single().execute()
+
+        return UserProfile(**profile_data.data)
+
+    except Exception as e:
+        # A more specific error handling would be better
+        if "User already registered" in str(e):
+            raise HTTPException(status_code=400, detail="Email already registered")
+        if "duplicate key value violates unique constraint" in str(e) and "profiles_username_key" in str(e):
+            raise HTTPException(status_code=400, detail="Username already taken")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @api_router.get("/auth/me", response_model=UserProfile)
-async def get_current_user_profile(current_user: User = Depends(get_current_user)):
-    """Get current user profile"""
-    return UserProfile(
-        id=current_user.id,
-        email=current_user.email,
-        username=current_user.username,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        avatar_url=current_user.avatar_url,
-        bio=current_user.bio,
-        location=current_user.location,
-        joined_date=current_user.joined_date,
-        is_verified=current_user.is_verified
-    )
+async def get_current_user_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user profile from Supabase"""
+    user_id = current_user.user.id
+
+    try:
+        # Fetch the user's profile from the 'profiles' table
+        profile_response = supabase.table("profiles").select("*").eq("id", user_id).single().execute()
+
+        if not profile_response.data:
+            raise HTTPException(status_code=404, detail="Profile not found")
+
+        # The UserProfile model expects a 'joined_date' and 'is_verified' field.
+        # Supabase's user object has 'created_at' and 'email_confirmed_at'.
+        # We'll map these and add any other missing fields.
+        profile_data = profile_response.data
+        profile_data['email'] = current_user.user.email
+        profile_data['joined_date'] = current_user.user.created_at
+        profile_data['is_verified'] = current_user.user.email_confirmed_at is not None
+
+        return UserProfile(**profile_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user profile: {str(e)}")
 
 @api_router.get("/users/{username}", response_model=UserProfile)
 async def get_user_profile(username: str):
     """Get public user profile"""
-    user = await db.users.find_one({"username": username})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if '_id' in user:
-        del user['_id']
-    
-    user_obj = User(**user)
-    return UserProfile(
-        id=user_obj.id,
-        email=user_obj.email,
-        username=user_obj.username,
-        first_name=user_obj.first_name,
-        last_name=user_obj.last_name,
-        avatar_url=user_obj.avatar_url,
-        bio=user_obj.bio,
-        location=user_obj.location,
-        joined_date=user_obj.joined_date,
-        is_verified=user_obj.is_verified
-    )
+    try:
+        profile_response = supabase.table("profiles").select("*").eq("username", username).single().execute()
+
+        if not profile_response.data:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # We need to get the email from the auth.users table
+        user_id = profile_response.data['id']
+        auth_user_response = supabase.auth.admin.get_user_by_id(user_id)
+
+        profile_data = profile_response.data
+        profile_data['email'] = auth_user_response.user.email
+        profile_data['joined_date'] = auth_user_response.user.created_at
+        profile_data['is_verified'] = auth_user_response.user.email_confirmed_at is not None
+
+        return UserProfile(**profile_data)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching user profile: {str(e)}")
 
 @api_router.put("/auth/profile", response_model=UserProfile)
 async def update_user_profile(
     profile_data: UserUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update user profile"""
+    user_id = current_user.user.id
     
-    # Build update data
-    update_data = {}
-    if profile_data.first_name is not None:
-        update_data["first_name"] = profile_data.first_name.strip()
-    if profile_data.last_name is not None:
-        update_data["last_name"] = profile_data.last_name.strip()
-    if profile_data.bio is not None:
-        update_data["bio"] = profile_data.bio.strip()
-    if profile_data.location is not None:
-        update_data["location"] = profile_data.location.strip()
-    if profile_data.avatar_url is not None:
-        update_data["avatar_url"] = profile_data.avatar_url
+    update_data = profile_data.dict(exclude_unset=True)
     
-    if update_data:
-        update_data["updated_at"] = datetime.utcnow()
-        
-        # Update in database
-        await db.users.update_one(
-            {"id": current_user.id},
-            {"$set": update_data}
-        )
-    
-    # Fetch updated user
-    updated_user = await db.users.find_one({"id": current_user.id})
-    if '_id' in updated_user:
-        del updated_user['_id']
-    
-    user_obj = User(**updated_user)
-    return UserProfile(
-        id=user_obj.id,
-        email=user_obj.email,
-        username=user_obj.username,
-        first_name=user_obj.first_name,
-        last_name=user_obj.last_name,
-        avatar_url=user_obj.avatar_url,
-        bio=user_obj.bio,
-        location=user_obj.location,
-        joined_date=user_obj.joined_date,
-        is_verified=user_obj.is_verified
-    )
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No update data provided")
+
+    try:
+        # Update profile in Supabase
+        updated_profile_response = supabase.table("profiles").update(update_data).eq("id", user_id).execute()
+
+        if not updated_profile_response.data:
+            raise HTTPException(status_code=404, detail="Profile not found or update failed")
+
+        # Fetch the full profile to return
+        return await get_current_user_profile(current_user)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating profile: {str(e)}")
+
+class AvatarUpdate(BaseModel):
+    avatar_url: str
 
 @api_router.post("/auth/avatar", response_model=UserProfile)
 async def upload_avatar(
-    avatar_file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
+    avatar_data: AvatarUpdate,
+    current_user: dict = Depends(get_current_user)
 ):
-    """Upload user avatar"""
+    """Update user avatar url"""
+    user_id = current_user.user.id
     
-    # Validate file type
-    if not avatar_file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
-    # Read and convert to base64
-    file_content = await avatar_file.read()
-    if len(file_content) > 5 * 1024 * 1024:  # 5MB limit
-        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
-    
-    # Convert to base64
-    import base64
-    avatar_base64 = f"data:{avatar_file.content_type};base64,{base64.b64encode(file_content).decode('utf-8')}"
-    
-    # Update user avatar
-    await db.users.update_one(
-        {"id": current_user.id},
-        {"$set": {"avatar_url": avatar_base64, "updated_at": datetime.utcnow()}}
-    )
-    
-    # Return updated profile
-    updated_user = await db.users.find_one({"id": current_user.id})
-    if '_id' in updated_user:
-        del updated_user['_id']
-    
-    user_obj = User(**updated_user)
-    return UserProfile(
-        id=user_obj.id,
-        email=user_obj.email,
-        username=user_obj.username,
-        first_name=user_obj.first_name,
-        last_name=user_obj.last_name,
-        avatar_url=user_obj.avatar_url,
-        bio=user_obj.bio,
-        location=user_obj.location,
-        joined_date=user_obj.joined_date,
-        is_verified=user_obj.is_verified
-    )
+    try:
+        # Update avatar url in Supabase
+        updated_profile_response = supabase.table("profiles").update({"avatar_url": avatar_data.avatar_url}).eq("id", user_id).execute()
+
+        if not updated_profile_response.data:
+            raise HTTPException(status_code=404, detail="Profile not found or update failed")
+
+        # Fetch the full profile to return
+        return await get_current_user_profile(current_user)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating avatar: {str(e)}")
 
 @api_router.get("/auth/settings", response_model=UserSettings)
-async def get_user_settings(current_user: User = Depends(get_current_user)):
-    """Get user settings"""
-    settings = current_user.preferences
-    
-    return UserSettings(
-        theme=settings.get("theme", "dark"),
-        language=settings.get("language", "en"),
-        notifications=settings.get("notifications", {
-            "email": True,
-            "push": True,
-            "social": True,
-            "recommendations": True
-        }),
-        privacy=settings.get("privacy", {
-            "profile_public": True,
-            "activity_public": True,
-            "lists_public": True
-        })
-    )
+async def get_user_settings(current_user: dict = Depends(get_current_user)):
+    """Get user settings from Supabase user metadata"""
+    settings = current_user.user.user_metadata.get("settings", {})
+
+    return UserSettings(**settings)
 
 @api_router.put("/auth/settings", response_model=UserSettings)
 async def update_user_settings(
     settings_data: UserSettings,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Update user settings"""
+    """Update user settings in Supabase user metadata"""
+    user_id = current_user.user.id
     
-    # Update user preferences
-    await db.users.update_one(
-        {"id": current_user.id},
-        {"$set": {
-            "preferences": settings_data.dict(),
-            "updated_at": datetime.utcnow()
-        }}
-    )
-    
-    return settings_data
+    try:
+        # Update user metadata in Supabase
+        updated_user_response = supabase.auth.admin.update_user_by_id(
+            user_id, {"user_metadata": {"settings": settings_data.dict()}}
+        )
+
+        return UserSettings(**updated_user_response.user.user_metadata.get("settings", {}))
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating settings: {str(e)}")
 
 # Watchlist API Endpoints
 @api_router.get("/watchlist", response_model=WatchlistResponse)
@@ -789,239 +622,184 @@ async def get_user_watchlist(
     status: Optional[WatchlistStatus] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get user's watchlist with optional status filter"""
-    skip = (page - 1) * limit
-    
-    # Build filter query
-    filter_query = {"user_id": current_user.id}
-    if status:
-        filter_query["status"] = status
-    
-    # Get watchlist items
-    cursor = db.watchlist.find(filter_query).sort("updated_date", -1).skip(skip).limit(limit)
-    watchlist_items = await cursor.to_list(length=limit)
-    
-    # Get content details for each item
-    items_with_content = []
-    for item in watchlist_items:
-        if '_id' in item:
-            del item['_id']
+    user_id = current_user.user.id
+    try:
+        query = supabase.table("watchlist").select("*, content(*)", count="exact").eq("user_id", user_id)
+
+        if status:
+            query = query.eq("status", status.value)
+
+        # Pagination
+        offset = (page - 1) * limit
+        query = query.range(offset, offset + limit - 1)
+
+        response = query.execute()
+
+        # Get status counts
+        status_counts = {}
+        for status_value in WatchlistStatus:
+            count_res = supabase.table("watchlist").select("id", count="exact").eq("user_id", user_id).eq("status", status_value.value).execute()
+            status_counts[status_value.value] = count_res.count
         
-        # Fetch content details
-        content = await db.content.find_one({"id": item["content_id"]})
-        if content:
-            if '_id' in content:
-                del content['_id']
-            
-            item_with_content = {
-                **item,
-                "content": content
-            }
-            items_with_content.append(item_with_content)
-    
-    # Get total count
-    total = await db.watchlist.count_documents({"user_id": current_user.id})
-    
-    # Get status counts
-    status_counts = {}
-    for status_value in WatchlistStatus:
-        count = await db.watchlist.count_documents({
-            "user_id": current_user.id,
-            "status": status_value.value
-        })
-        status_counts[status_value.value] = count
-    
-    return WatchlistResponse(
-        items=items_with_content,
-        total=total,
-        status_counts=status_counts
-    )
+        return WatchlistResponse(
+            items=response.data,
+            total=response.count,
+            status_counts=status_counts
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/watchlist", response_model=dict)
 async def add_to_watchlist(
     item_data: WatchlistItemCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Add content to user's watchlist"""
+    user_id = current_user.user.id
     
-    # Check if content exists
-    content = await db.content.find_one({"id": item_data.content_id})
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
-    
-    # Check if item already exists in watchlist
-    existing_item = await db.watchlist.find_one({
-        "user_id": current_user.id,
-        "content_id": item_data.content_id
-    })
-    
-    if existing_item:
-        raise HTTPException(status_code=400, detail="Content already in watchlist")
-    
-    # Create watchlist item
-    watchlist_item = WatchlistItem(
-        user_id=current_user.id,
-        **item_data.dict()
-    )
-    
-    # Set dates based on status
-    if item_data.status == WatchlistStatus.WATCHING:
-        watchlist_item.started_date = datetime.utcnow()
-    elif item_data.status == WatchlistStatus.COMPLETED:
-        watchlist_item.started_date = datetime.utcnow()
-        watchlist_item.completed_date = datetime.utcnow()
-    
-    # Insert into database
-    await db.watchlist.insert_one(watchlist_item.dict())
-    
-    return {"message": "Content added to watchlist successfully", "id": watchlist_item.id}
+    try:
+        # Check if content exists
+        content_res = supabase.table("content").select("id").eq("id", item_data.content_id).execute()
+        if not content_res.data:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        watchlist_item_dict = item_data.dict()
+        watchlist_item_dict['user_id'] = user_id
+
+        if item_data.status == WatchlistStatus.WATCHING:
+            watchlist_item_dict['started_date'] = datetime.utcnow().isoformat()
+        elif item_data.status == WatchlistStatus.COMPLETED:
+            watchlist_item_dict['started_date'] = datetime.utcnow().isoformat()
+            watchlist_item_dict['completed_date'] = datetime.utcnow().isoformat()
+
+        response = supabase.table("watchlist").insert(watchlist_item_dict).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to add to watchlist")
+
+        return {"message": "Content added to watchlist successfully", "id": response.data[0]['id']}
+    except Exception as e:
+        if "unique constraint" in str(e):
+            raise HTTPException(status_code=400, detail="Content already in watchlist")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.put("/watchlist/{item_id}", response_model=dict)
 async def update_watchlist_item(
     item_id: str,
     item_data: WatchlistItemUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update watchlist item"""
+    user_id = current_user.user.id
     
-    # Find existing item
-    existing_item = await db.watchlist.find_one({
-        "id": item_id,
-        "user_id": current_user.id
-    })
-    
-    if not existing_item:
-        raise HTTPException(status_code=404, detail="Watchlist item not found")
-    
-    # Build update data
-    update_data = {k: v for k, v in item_data.dict().items() if v is not None}
-    
-    # Update dates based on status changes
-    if item_data.status:
-        if item_data.status == WatchlistStatus.WATCHING and not existing_item.get("started_date"):
-            update_data["started_date"] = datetime.utcnow()
-        elif item_data.status == WatchlistStatus.COMPLETED:
-            if not existing_item.get("started_date"):
-                update_data["started_date"] = datetime.utcnow()
-            update_data["completed_date"] = datetime.utcnow()
-        elif item_data.status == WatchlistStatus.DROPPED and not existing_item.get("started_date"):
-            update_data["started_date"] = datetime.utcnow()
-    
-    update_data["updated_date"] = datetime.utcnow()
-    
-    # Update in database
-    await db.watchlist.update_one(
-        {"id": item_id, "user_id": current_user.id},
-        {"$set": update_data}
-    )
-    
-    return {"message": "Watchlist item updated successfully"}
+    try:
+        update_data = item_data.dict(exclude_unset=True)
+
+        # Fetch existing item to check started_date
+        existing_item_res = supabase.table("watchlist").select("started_date").eq("id", item_id).eq("user_id", user_id).single().execute()
+        existing_item = existing_item_res.data
+
+        if not existing_item:
+            raise HTTPException(status_code=404, detail="Watchlist item not found")
+
+        if item_data.status:
+            if item_data.status == WatchlistStatus.WATCHING and not existing_item.get("started_date"):
+                update_data["started_date"] = datetime.utcnow().isoformat()
+            elif item_data.status == WatchlistStatus.COMPLETED:
+                if not existing_item.get("started_date"):
+                    update_data["started_date"] = datetime.utcnow().isoformat()
+                update_data["completed_date"] = datetime.utcnow().isoformat()
+            elif item_data.status == WatchlistStatus.DROPPED and not existing_item.get("started_date"):
+                update_data["started_date"] = datetime.utcnow().isoformat()
+
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+
+        response = supabase.table("watchlist").update(update_data).eq("id", item_id).eq("user_id", user_id).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update watchlist item")
+
+        return {"message": "Watchlist item updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/watchlist/{item_id}")
 async def remove_from_watchlist(
     item_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Remove content from user's watchlist"""
+    user_id = current_user.user.id
     
-    # Check if item exists
-    existing_item = await db.watchlist.find_one({
-        "id": item_id,
-        "user_id": current_user.id
-    })
-    
-    if not existing_item:
-        raise HTTPException(status_code=404, detail="Watchlist item not found")
-    
-    # Delete item
-    await db.watchlist.delete_one({
-        "id": item_id,
-        "user_id": current_user.id
-    })
-    
-    return {"message": "Content removed from watchlist successfully"}
+    try:
+        response = supabase.table("watchlist").delete().eq("id", item_id).eq("user_id", user_id).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Watchlist item not found or delete failed")
+
+        return {"message": "Content removed from watchlist successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/watchlist/stats", response_model=dict)
-async def get_watchlist_stats(current_user: User = Depends(get_current_user)):
+async def get_watchlist_stats(current_user: dict = Depends(get_current_user)):
     """Get user's watchlist statistics"""
-    
-    # Get status counts
-    status_counts = {}
-    for status_value in WatchlistStatus:
-        count = await db.watchlist.count_documents({
-            "user_id": current_user.id,
-            "status": status_value.value
-        })
-        status_counts[status_value.value] = count
-    
-    # Get total content count
-    total_content = await db.watchlist.count_documents({"user_id": current_user.id})
-    
-    # Get recent activity (last 10 items)
-    recent_cursor = db.watchlist.find({
-        "user_id": current_user.id
-    }).sort("updated_date", -1).limit(10)
-    recent_items = await recent_cursor.to_list(length=10)
-    
-    # Get content details for recent items
-    recent_with_content = []
-    for item in recent_items:
-        if '_id' in item:
-            del item['_id']
+    user_id = current_user.user.id
+    try:
+        # Get status counts
+        status_counts = {}
+        for status_value in WatchlistStatus:
+            count_res = supabase.table("watchlist").select("id", count="exact").eq("user_id", user_id).eq("status", status_value.value).execute()
+            status_counts[status_value.value] = count_res.count
+
+        # Get total content count
+        total_res = supabase.table("watchlist").select("id", count="exact").eq("user_id", user_id).execute()
+        total_content = total_res.count
+
+        # Get recent activity
+        recent_res = supabase.table("watchlist").select("*, content(*)").eq("user_id", user_id).order("updated_at", desc=True).limit(10).execute()
         
-        content = await db.content.find_one({"id": item["content_id"]})
-        if content:
-            if '_id' in content:
-                del content['_id']
-            
-            recent_with_content.append({
-                **item,
-                "content": content
-            })
-    
-    return {
-        "status_counts": status_counts,
-        "total_content": total_content,
-        "recent_activity": recent_with_content
-    }
+        return {
+            "status_counts": status_counts,
+            "total_content": total_content,
+            "recent_activity": recent_res.data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Rating & Review API Endpoints
 @api_router.post("/reviews", response_model=dict)
 async def create_review(
     review_data: ReviewCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new review for content"""
-    
-    # Check if content exists
-    content = await db.content.find_one({"id": review_data.content_id})
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
-    
-    # Check if user already reviewed this content
-    existing_review = await db.reviews.find_one({
-        "user_id": current_user.id,
-        "content_id": review_data.content_id
-    })
-    
-    if existing_review:
-        raise HTTPException(status_code=400, detail="You have already reviewed this content")
-    
-    # Create review
-    review = Review(
-        user_id=current_user.id,
-        **review_data.dict()
-    )
-    
-    # Insert into database
-    await db.reviews.insert_one(review.dict())
-    
-    # Update content's average rating
-    await update_content_rating(review_data.content_id)
-    
-    return {"message": "Review created successfully", "id": review.id}
+    user_id = current_user.user.id
+    try:
+        # Check if content exists
+        content_res = supabase.table("content").select("id").eq("id", review_data.content_id).execute()
+        if not content_res.data:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        review_dict = review_data.dict()
+        review_dict['user_id'] = user_id
+
+        response = supabase.table("reviews").insert(review_dict).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create review")
+
+        # Update content's average rating
+        await update_content_rating(review_data.content_id)
+
+        return {"message": "Review created successfully", "id": response.data[0]['id']}
+    except Exception as e:
+        if "unique constraint" in str(e):
+            raise HTTPException(status_code=400, detail="You have already reviewed this content")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/reviews", response_model=ReviewsListResponse)
 async def get_reviews(
@@ -1029,164 +807,118 @@ async def get_reviews(
     user_id: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    sort_by: str = Query("created_date", regex="^(created_date|rating|helpful_votes)$")
+    sort_by: str = Query("created_at", regex="^(created_at|rating|helpful_votes)$")
 ):
     """Get reviews with optional filters"""
-    skip = (page - 1) * limit
-    
-    # Build filter query
-    filter_query = {}
-    if content_id:
-        filter_query["content_id"] = content_id
-    if user_id:
-        filter_query["user_id"] = user_id
-    
-    # Get total count
-    total = await db.reviews.count_documents(filter_query)
-    
-    # Get reviews with sorting
-    sort_direction = -1  # Newest first
-    cursor = db.reviews.find(filter_query).sort(sort_by, sort_direction).skip(skip).limit(limit)
-    reviews = await cursor.to_list(length=limit)
-    
-    # Enrich reviews with user and content data
-    enriched_reviews = []
-    for review in reviews:
-        if '_id' in review:
-            del review['_id']
-        
-        # Get user info
-        user = await db.users.find_one({"id": review["user_id"]})
-        user_info = {
-            "username": user["username"],
-            "avatar_url": user.get("avatar_url"),
-            "is_verified": user.get("is_verified", False)
-        } if user else {}
-        
-        # Get content info
-        content = await db.content.find_one({"id": review["content_id"]})
-        content_info = {
-            "title": content["title"],
-            "poster_url": content["poster_url"],
-            "year": content["year"]
-        } if content else {}
-        
-        enriched_reviews.append({
-            **review,
-            "user": user_info,
-            "content": content_info
-        })
-    
-    # Calculate average rating if filtering by content
-    avg_rating = None
-    if content_id:
-        rating_pipeline = [
-            {"$match": {"content_id": content_id}},
-            {"$group": {"_id": None, "avg_rating": {"$avg": "$rating"}}}
-        ]
-        avg_result = await db.reviews.aggregate(rating_pipeline).to_list(1)
-        if avg_result:
-            avg_rating = round(avg_result[0]["avg_rating"], 1)
-    
-    return ReviewsListResponse(
-        reviews=enriched_reviews,
-        total=total,
-        page=page,
-        limit=limit,
-        avg_rating=avg_rating
-    )
+    try:
+        query = supabase.table("reviews").select("*, profiles(*), content(*)", count="exact")
+
+        if content_id:
+            query = query.eq("content_id", content_id)
+        if user_id:
+            query = query.eq("user_id", user_id)
+
+        # Sorting
+        sort_direction = "desc" # Supabase uses 'desc' for descending
+        query = query.order(sort_by, desc=True if sort_direction == "desc" else False)
+
+        # Pagination
+        offset = (page - 1) * limit
+        query = query.range(offset, offset + limit - 1)
+
+        response = query.execute()
+
+        # Calculate average rating if filtering by content
+        avg_rating = None
+        if content_id:
+            rating_res = supabase.table("reviews").select("rating").eq("content_id", content_id).execute()
+            if rating_res.data:
+                ratings = [r['rating'] for r in rating_res.data]
+                avg_rating = round(sum(ratings) / len(ratings), 1)
+
+        return ReviewsListResponse(
+            reviews=response.data,
+            total=response.count,
+            page=page,
+            limit=limit,
+            avg_rating=avg_rating
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/reviews/{review_id}", response_model=ReviewResponse)
 async def get_review(review_id: str):
     """Get a specific review by ID"""
-    review = await db.reviews.find_one({"id": review_id})
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-    
-    if '_id' in review:
-        del review['_id']
-    
-    # Get user and content info
-    user = await db.users.find_one({"id": review["user_id"]})
-    content = await db.content.find_one({"id": review["content_id"]})
-    
-    user_info = {
-        "username": user["username"],
-        "avatar_url": user.get("avatar_url"),
-        "is_verified": user.get("is_verified", False)
-    } if user else {}
-    
-    content_info = {
-        "title": content["title"],
-        "poster_url": content["poster_url"],
-        "year": content["year"]
-    } if content else {}
-    
-    return ReviewResponse(
-        review=Review(**review),
-        user=user_info,
-        content=content_info
-    )
+    try:
+        response = supabase.table("reviews").select("*, profiles(*), content(*)").eq("id", review_id).single().execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Review not found")
+
+        review_data = response.data
+        user_info = review_data.pop('profiles')
+        content_info = review_data.pop('content')
+
+        return ReviewResponse(
+            review=Review(**review_data),
+            user=user_info,
+            content=content_info
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.put("/reviews/{review_id}", response_model=dict)
 async def update_review(
     review_id: str,
     review_data: ReviewUpdate,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update user's own review"""
-    
-    # Find existing review
-    existing_review = await db.reviews.find_one({
-        "id": review_id,
-        "user_id": current_user.id
-    })
-    
-    if not existing_review:
-        raise HTTPException(status_code=404, detail="Review not found or not owned by user")
-    
-    # Build update data
-    update_data = {k: v for k, v in review_data.dict().items() if v is not None}
-    update_data["updated_date"] = datetime.utcnow()
-    
-    # Update in database
-    await db.reviews.update_one(
-        {"id": review_id, "user_id": current_user.id},
-        {"$set": update_data}
-    )
-    
-    # Update content's average rating if rating changed
-    if review_data.rating is not None:
-        await update_content_rating(existing_review["content_id"])
-    
-    return {"message": "Review updated successfully"}
+    user_id = current_user.user.id
+    try:
+        update_data = review_data.dict(exclude_unset=True)
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+
+        # Get the content_id before updating
+        review_res = supabase.table("reviews").select("content_id").eq("id", review_id).eq("user_id", user_id).single().execute()
+        if not review_res.data:
+            raise HTTPException(status_code=404, detail="Review not found or not owned by user")
+
+        response = supabase.table("reviews").update(update_data).eq("id", review_id).eq("user_id", user_id).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update review")
+
+        if "rating" in update_data:
+            await update_content_rating(review_res.data['content_id'])
+
+        return {"message": "Review updated successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.delete("/reviews/{review_id}")
 async def delete_review(
     review_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete user's own review"""
-    
-    # Find existing review
-    existing_review = await db.reviews.find_one({
-        "id": review_id,
-        "user_id": current_user.id
-    })
-    
-    if not existing_review:
-        raise HTTPException(status_code=404, detail="Review not found or not owned by user")
-    
-    # Delete review
-    await db.reviews.delete_one({
-        "id": review_id,
-        "user_id": current_user.id
-    })
-    
-    # Update content's average rating
-    await update_content_rating(existing_review["content_id"])
-    
-    return {"message": "Review deleted successfully"}
+    user_id = current_user.user.id
+    try:
+        # Get the content_id before deleting
+        review_res = supabase.table("reviews").select("content_id").eq("id", review_id).eq("user_id", user_id).single().execute()
+        if not review_res.data:
+            raise HTTPException(status_code=404, detail="Review not found or not owned by user")
+
+        response = supabase.table("reviews").delete().eq("id", review_id).eq("user_id", user_id).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to delete review")
+
+        await update_content_rating(review_res.data['content_id'])
+
+        return {"message": "Review deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/reviews/{review_id}/vote")
 async def vote_review(
@@ -1285,36 +1017,29 @@ async def get_content_ratings(content_id: str):
 # Helper function to update content rating
 async def update_content_rating(content_id: str):
     """Update content's average rating and review count"""
-    
-    # Calculate new average rating
-    rating_pipeline = [
-        {"$match": {"content_id": content_id}},
-        {"$group": {
-            "_id": None,
-            "avg_rating": {"$avg": "$rating"},
-            "total_reviews": {"$sum": 1}
-        }}
-    ]
-    
-    result = await db.reviews.aggregate(rating_pipeline).to_list(1)
-    
-    if result:
-        data = result[0]
-        avg_rating = round(data["avg_rating"], 1)
-        total_reviews = data["total_reviews"]
-    else:
-        avg_rating = 0.0
-        total_reviews = 0
-    
-    # Update content document
-    await db.content.update_one(
-        {"id": content_id},
-        {"$set": {
+    try:
+        # Fetch all ratings for the content
+        reviews_res = supabase.table("reviews").select("rating").eq("content_id", content_id).execute()
+
+        if reviews_res.data:
+            ratings = [r['rating'] for r in reviews_res.data]
+            avg_rating = round(sum(ratings) / len(ratings), 1)
+            total_reviews = len(ratings)
+        else:
+            avg_rating = 0.0
+            total_reviews = 0
+
+        # Update content document
+        supabase.table("content").update({
             "rating": avg_rating,
-            "review_count": total_reviews,
-            "updated_at": datetime.utcnow()
-        }}
-    )
+            # Assuming there's a 'review_count' column in your 'content' table
+            # "review_count": total_reviews,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", content_id).execute()
+
+    except Exception as e:
+        # Log the error, but don't block the user response
+        logger.error(f"Failed to update content rating for {content_id}: {str(e)}")
 
 # Personal Analytics API Endpoints
 @api_router.post("/analytics/view")
@@ -3520,51 +3245,42 @@ async def get_content(
     year: Optional[int] = None
 ):
     """Get paginated content with optional filters"""
-    skip = (page - 1) * limit
-    
-    # Build filter query
-    filter_query = {}
-    
-    if search:
-        filter_query["$or"] = [
-            {"title": {"$regex": search, "$options": "i"}},
-            {"original_title": {"$regex": search, "$options": "i"}},
-            {"synopsis": {"$regex": search, "$options": "i"}},
-            {"tags": {"$regex": search, "$options": "i"}}
-        ]
-    
-    if country:
-        filter_query["country"] = {"$regex": country, "$options": "i"}
-    
-    if content_type:
-        filter_query["content_type"] = content_type
-    
-    if genre:
-        filter_query["genres"] = genre
-    
-    if year:
-        filter_query["year"] = year
-    
-    # Get total count
-    total = await db.content.count_documents(filter_query)
-    
-    # Get paginated results
-    cursor = db.content.find(filter_query).skip(skip).limit(limit).sort("created_at", -1)
-    contents = await cursor.to_list(length=limit)
-    
-    # Convert ObjectId to string and create Content objects
-    content_list = []
-    for content in contents:
-        if '_id' in content:
-            del content['_id']
-        content_list.append(Content(**content))
-    
-    return ContentResponse(
-        contents=content_list,
-        total=total,
-        page=page,
-        limit=limit
-    )
+    try:
+        query = supabase.table("content").select("*", count="exact")
+
+        if search:
+            # Supabase text search is more efficient for this
+            query = query.text_search("title", search, config="english")
+
+        if country:
+            query = query.ilike("country", f"%{country}%")
+
+        if content_type:
+            query = query.eq("content_type", content_type.value)
+
+        if genre:
+            query = query.contains("genres", [genre.value])
+
+        if year:
+            query = query.eq("year", year)
+
+        # Pagination
+        offset = (page - 1) * limit
+        query = query.range(offset, offset + limit - 1)
+
+        # Execute the query
+        response = query.execute()
+
+        contents = [Content(**c) for c in response.data]
+
+        return ContentResponse(
+            contents=contents,
+            total=response.count,
+            page=page,
+            limit=limit
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/content/search")
 async def advanced_content_search(
@@ -3695,24 +3411,29 @@ async def get_featured_content(
 @api_router.get("/content/{content_id}", response_model=Content)
 async def get_content_by_id(content_id: str):
     """Get content by ID"""
-    content = await db.content.find_one({"id": content_id})
-    if not content:
-        raise HTTPException(status_code=404, detail="Content not found")
-    
-    if '_id' in content:
-        del content['_id']
-    
-    return Content(**content)
+    try:
+        response = supabase.table("content").select("*").eq("id", content_id).single().execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Content not found")
+
+        return Content(**response.data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/content", response_model=Content)
 async def create_content(content_data: ContentCreate):
     """Create new content"""
-    content = Content(**content_data.dict())
-    
-    # Insert into database
-    await db.content.insert_one(content.dict())
-    
-    return content
+    try:
+        content = Content(**content_data.dict())
+        response = supabase.table("content").insert(content.dict()).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create content")
+
+        return Content(**response.data[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Admin Content Management Routes
 @api_router.post("/admin/content", response_model=Content)

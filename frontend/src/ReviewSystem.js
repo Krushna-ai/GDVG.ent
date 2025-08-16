@@ -47,37 +47,12 @@ const ReviewSystem = ({ contentId, darkTheme }) => {
 
   const checkUserReview = async () => {
     try {
-      const token = localStorage.getItem('user_token');
-      if (!token) return;
-
-      const response = await axios.get(`${API}/reviews?content_id=${contentId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      // Find user's review in the results
-      const currentUserId = await getCurrentUserId();
-      if (currentUserId) {
-        const existingReview = response.data.reviews.find(
-          review => review.user_id === currentUserId
-        );
-        setUserReview(existingReview);
+      const response = await axios.get(`${API}/reviews?content_id=${contentId}&user_id=me`);
+      if (response.data.reviews.length > 0) {
+        setUserReview(response.data.reviews[0]);
       }
     } catch (error) {
       console.error('Error checking user review:', error);
-    }
-  };
-
-  const getCurrentUserId = async () => {
-    try {
-      const token = localStorage.getItem('user_token');
-      if (!token) return null;
-
-      const response = await axios.get(`${API}/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return response.data.id;
-    } catch (error) {
-      return null;
     }
   };
 
@@ -185,24 +160,14 @@ const ReviewSystem = ({ contentId, darkTheme }) => {
 
       setSubmitting(true);
       try {
-        const token = localStorage.getItem('user_token');
-        if (!token) {
-          alert('Please sign in to write a review');
-          return;
-        }
-
         if (userReview) {
           // Update existing review
-          await axios.put(`${API}/reviews/${userReview.id}`, formData, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          await axios.put(`${API}/reviews/${userReview.id}`, formData);
         } else {
           // Create new review
           await axios.post(`${API}/reviews`, {
             ...formData,
             content_id: contentId
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
           });
         }
 
@@ -228,10 +193,7 @@ const ReviewSystem = ({ contentId, darkTheme }) => {
       if (!userReview || !confirm('Are you sure you want to delete your review?')) return;
 
       try {
-        const token = localStorage.getItem('user_token');
-        await axios.delete(`${API}/reviews/${userReview.id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await axios.delete(`${API}/reviews/${userReview.id}`);
 
         setUserReview(null);
         setShowWriteReview(false);
@@ -370,16 +332,7 @@ const ReviewSystem = ({ contentId, darkTheme }) => {
 
     const handleVote = async (helpful) => {
       try {
-        const token = localStorage.getItem('user_token');
-        if (!token) {
-          alert('Please sign in to vote on reviews');
-          return;
-        }
-
-        await axios.post(`${API}/reviews/${review.id}/vote`, 
-          { helpful },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        await axios.post(`${API}/reviews/${review.id}/vote`, { helpful });
 
         fetchReviews(); // Refresh to show updated vote counts
       } catch (error) {

@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { supabase } from './supabaseClient';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const UserAuth = ({ onLogin, darkTheme, isLogin, setIsLogin }) => {
+const UserAuth = ({ darkTheme, isLogin, setIsLogin }) => {
   const [formData, setFormData] = useState({
     email: '',
     username: '',
@@ -28,29 +25,28 @@ const UserAuth = ({ onLogin, darkTheme, isLogin, setIsLogin }) => {
     setError('');
 
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/register';
-      const payload = isLogin 
-        ? { email: formData.email, password: formData.password }
-        : formData;
-
-      const response = await axios.post(`${API}${endpoint}`, payload);
-      
       if (isLogin) {
-        const { access_token } = response.data;
-        localStorage.setItem('user_token', access_token);
-        onLogin(access_token, 'user');
-      } else {
-        // After successful registration, automatically log in
-        const loginResponse = await axios.post(`${API}/auth/login`, {
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
-          password: formData.password
+          password: formData.password,
         });
-        const { access_token } = loginResponse.data;
-        localStorage.setItem('user_token', access_token);
-        onLogin(access_token, 'user');
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              username: formData.username,
+              first_name: formData.first_name,
+              last_name: formData.last_name,
+            },
+          },
+        });
+        if (error) throw error;
       }
     } catch (error) {
-      setError(error.response?.data?.detail || `${isLogin ? 'Login' : 'Registration'} failed`);
+      setError(error.message || `${isLogin ? 'Login' : 'Registration'} failed`);
     } finally {
       setLoading(false);
     }
