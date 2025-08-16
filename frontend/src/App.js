@@ -271,6 +271,19 @@ const ContentCard = ({ content, darkTheme, onClick }) => {
 
 // Content Grid Component
 const ContentGrid = ({ contents, darkTheme, onContentClick, loading }) => {
+  const navigate = useNavigate();
+
+  // Helper function to format title for URL
+  const formatTitleForUrl = (title) => {
+    return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+  };
+
+  // Handle content click with navigation
+  const handleContentClick = (content) => {
+    const titleSlug = formatTitleForUrl(content.title);
+    navigate(`/content/${content.id}/${titleSlug}`);
+  };
+
   if (loading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -311,7 +324,7 @@ const ContentGrid = ({ contents, darkTheme, onContentClick, loading }) => {
           key={content.id}
           content={content}
           darkTheme={darkTheme}
-          onClick={onContentClick}
+          onClick={handleContentClick}
         />
       ))}
     </div>
