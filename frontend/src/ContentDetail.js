@@ -1,370 +1,184 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import WatchlistButton from './WatchlistButton';
-import QuickRating from './QuickRating';
-import ReviewSystem from './ReviewSystem';
-import Footer from './Footer';
+import React from 'react';
 
-const ContentDetail = ({ darkTheme, currentUser }) => {
-  const { id, title } = useParams();
-  const navigate = useNavigate();
-  const [content, setContent] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('details');
-  const [relatedContent, setRelatedContent] = useState([]);
+const ContentDetail = ({ content, darkTheme, onClose }) => {
+  if (!content) return null;
 
-  useEffect(() => {
-    fetchContentDetail();
-    fetchRelatedContent();
-  }, [id]);
-
-  const fetchContentDetail = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/content/${id}`);
-      setContent(response.data);
-    } catch (error) {
-      console.error('Error fetching content:', error);
-    } finally {
-      setLoading(false);
-    }
+  const formatDuration = (minutes) => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
-
-  const fetchRelatedContent = async () => {
-    try {
-      const response = await axios.get(`${process.env.REACT_APP_BACKEND_URL}/api/content`);
-      // Filter related content (same genre/country, exclude current)
-      const related = response.data.filter(item => 
-        item._id !== id && (
-          item.genre === content?.genre || 
-          item.country === content?.country
-        )
-      ).slice(0, 6);
-      setRelatedContent(related);
-    } catch (error) {
-      console.error('Error fetching related content:', error);
-    }
-  };
-
-  const formatTitleForUrl = (title) => {
-    return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
-  };
-
-  const handleRelatedContentClick = (relatedContent) => {
-    const titleSlug = formatTitleForUrl(relatedContent.title);
-    navigate(`/content/${relatedContent._id}/${titleSlug}`);
-  };
-
-  if (loading) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center ${darkTheme ? 'bg-black' : 'bg-white'}`}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className={`mt-4 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>Loading content details...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!content) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center ${darkTheme ? 'bg-black' : 'bg-white'}`}>
-        <div className="text-center">
-          <h2 className={`text-2xl font-bold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>Content Not Found</h2>
-          <p className={`mt-2 ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>The requested content could not be found.</p>
-          <button
-            onClick={() => navigate('/')}
-            className="mt-4 bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Back to Home
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const tabs = [
-    { id: 'details', label: 'Details' },
-    { id: 'cast', label: 'Cast & Crew' },
-    { id: 'reviews', label: 'Reviews' },
-    { id: 'photos', label: 'Photos' }
-  ];
 
   return (
-    <div className={`min-h-screen ${darkTheme ? 'bg-black' : 'bg-gray-50'}`}>
-      {/* Content Header */}
-      <div className={`${darkTheme ? 'bg-gray-900' : 'bg-white'} shadow-lg`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col lg:flex-row gap-8">
-            {/* Poster Image */}
-            <div className="lg:w-1/4">
-              <div className="sticky top-8">
-                <div className="relative">
-                  <img
-                    src={content.image || '/api/placeholder/300/450'}
-                    alt={content.title}
-                    className="w-full rounded-lg shadow-lg"
-                    onError={(e) => {
-                      e.target.src = '/api/placeholder/300/450';
-                    }}
-                  />
-                  <div className="mt-4 space-y-3">
-                    <WatchlistButton
-                      content={content}
-                      darkTheme={darkTheme}
-                      currentUser={currentUser}
-                      className="w-full"
-                    />
-                    <QuickRating
-                      content={content}
-                      darkTheme={darkTheme}
-                      currentUser={currentUser}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity" onClick={onClose}>
+          <div className="absolute inset-0 bg-black opacity-75" />
+        </div>
 
-            {/* Content Information */}
-            <div className="lg:w-3/4">
-              <div className="space-y-6">
-                {/* Title and Basic Info */}
-                <div>
-                  <h1 className={`text-4xl font-bold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                    {content.title}
-                  </h1>
-                  {content.originalTitle && (
-                    <h2 className={`text-xl mt-2 ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {content.originalTitle}
-                    </h2>
-                  )}
-                  <div className="flex items-center gap-4 mt-4">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      darkTheme ? 'bg-gray-800 text-gray-300' : 'bg-gray-200 text-gray-700'
-                    }`}>
-                      {content.type}
-                    </span>
-                    <span className={`text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {content.year}
-                    </span>
-                    <span className={`text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      {content.country}
-                    </span>
-                  </div>
-                </div>
+        <div className={`inline-block align-bottom rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full ${
+          darkTheme ? 'bg-black border border-red-900/50' : 'bg-white border border-gray-200'
+        }`}>
+          {/* Header with banner */}
+          <div className="relative h-64 overflow-hidden">
+            <img
+              src={content.banner_url || content.poster_url}
+              alt={content.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
 
-                {/* Rating and Statistics */}
-                <div className={`p-4 rounded-lg ${darkTheme ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                  <div className="flex items-center gap-6">
-                    <div className="text-center">
-                      <div className="text-3xl font-bold text-red-600">
-                        {content.rating || 'N/A'}
-                      </div>
-                      <div className={`text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Rating
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className={`text-2xl font-bold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                        {content.episodes || 'N/A'}
-                      </div>
-                      <div className={`text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Episodes
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <div className={`text-2xl font-bold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                        {content.status || 'N/A'}
-                      </div>
-                      <div className={`text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Status
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-2 bg-black/70 backdrop-blur-sm rounded-full text-white hover:bg-red-600/80 transition-all duration-200"
+            >
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
 
-                {/* Navigation Tabs */}
-                <div className={`border-b ${darkTheme ? 'border-gray-800' : 'border-gray-200'}`}>
-                  <nav className="flex space-x-8">
-                    {tabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                          activeTab === tab.id
-                            ? 'border-red-600 text-red-600'
-                            : `border-transparent ${
-                                darkTheme 
-                                  ? 'text-gray-400 hover:text-gray-300 hover:border-gray-300' 
-                                  : 'text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                              }`
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-              </div>
+            {/* Title overlay */}
+            <div className="absolute bottom-6 left-6 right-6">
+              <h2 className="text-4xl font-bold text-white mb-2">{content.title}</h2>
+              {content.original_title && content.original_title !== content.title && (
+                <p className="text-xl text-gray-300">{content.original_title}</p>
+              )}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Tab Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'details' && (
-          <div className="space-y-8">
+          {/* Content */}
+          <div className="p-6">
+            {/* Info bar */}
+            <div className="flex flex-wrap items-center gap-4 mb-6">
+              <div className="flex items-center gap-1">
+                <svg className="h-5 w-5 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                  <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z"/>
+                </svg>
+                <span className={`font-semibold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
+                  {content.rating.toFixed(1)}
+                </span>
+              </div>
+
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                content.content_type === 'movie' ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300' :
+                content.content_type === 'series' ? 'bg-red-200 text-red-900 dark:bg-red-800/50 dark:text-red-200' :
+                content.content_type === 'drama' ? 'bg-red-300 text-red-900 dark:bg-red-700/50 dark:text-red-100' :
+                'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              }`}>
+                {content.content_type.charAt(0).toUpperCase() + content.content_type.slice(1)}
+              </span>
+
+              <span className={`${darkTheme ? 'text-gray-300' : 'text-gray-700'}`}>
+                {content.year}
+              </span>
+
+              <span className={`${darkTheme ? 'text-gray-300' : 'text-gray-700'}`}>
+                {content.country}
+              </span>
+
+              {content.duration && (
+                <span className={`${darkTheme ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {formatDuration(content.duration)}
+                </span>
+              )}
+
+              {content.episodes && (
+                <span className={`${darkTheme ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {content.episodes} episodes
+                </span>
+              )}
+            </div>
+
+            {/* Genres */}
+            <div className="mb-6">
+              <div className="flex flex-wrap gap-2">
+                {content.genres.map((genre) => (
+                  <span
+                    key={genre}
+                    className={`px-3 py-1 rounded-full text-sm ${
+                      darkTheme
+                        ? 'bg-red-900/30 text-red-300 border border-red-800/50'
+                        : 'bg-red-100 text-red-700 border border-red-200'
+                    }`}
+                  >
+                    {genre.charAt(0).toUpperCase() + genre.slice(1).replace('_', ' ')}
+                  </span>
+                ))}
+              </div>
+            </div>
+
             {/* Synopsis */}
-            <section>
-              <h3 className={`text-2xl font-bold mb-4 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
+            <div className="mb-6">
+              <h3 className={`text-lg font-semibold mb-3 ${
+                darkTheme ? 'text-white' : 'text-gray-900'
+              }`}>
                 Synopsis
               </h3>
-              <p className={`text-lg leading-relaxed ${darkTheme ? 'text-gray-300' : 'text-gray-700'}`}>
-                {content.synopsis || 'No synopsis available.'}
-              </p>
-            </section>
-
-            {/* Details */}
-            <section>
-              <h3 className={`text-2xl font-bold mb-4 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                Information
-              </h3>
-              <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-lg ${
-                darkTheme ? 'bg-gray-900' : 'bg-white'
+              <p className={`leading-relaxed ${
+                darkTheme ? 'text-gray-300' : 'text-gray-700'
               }`}>
-                <div className="space-y-4">
-                  <div>
-                    <span className={`font-semibold ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Genre:
-                    </span>
-                    <span className={`ml-2 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                      {content.genre || 'N/A'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Country:
-                    </span>
-                    <span className={`ml-2 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                      {content.country || 'N/A'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Year:
-                    </span>
-                    <span className={`ml-2 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                      {content.year || 'N/A'}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <span className={`font-semibold ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Type:
-                    </span>
-                    <span className={`ml-2 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                      {content.type || 'N/A'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Episodes:
-                    </span>
-                    <span className={`ml-2 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                      {content.episodes || 'N/A'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className={`font-semibold ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Status:
-                    </span>
-                    <span className={`ml-2 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                      {content.status || 'N/A'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </section>
+                {content.synopsis}
+              </p>
+            </div>
 
-            {/* Related Content */}
-            {relatedContent.length > 0 && (
-              <section>
-                <h3 className={`text-2xl font-bold mb-6 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-                  Related Content
+            {/* Cast */}
+            {content.cast.length > 0 && (
+              <div className="mb-6">
+                <h3 className={`text-lg font-semibold mb-3 ${
+                  darkTheme ? 'text-white' : 'text-gray-900'
+                }`}>
+                  Cast
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {relatedContent.map((item) => (
-                    <div
-                      key={item._id}
-                      onClick={() => handleRelatedContentClick(item)}
-                      className={`cursor-pointer rounded-lg overflow-hidden transition-transform hover:scale-105 ${
-                        darkTheme ? 'bg-gray-800' : 'bg-white'
-                      } shadow-lg`}
-                    >
-                      <img
-                        src={item.image || '/api/placeholder/150/225'}
-                        alt={item.title}
-                        className="w-full h-40 object-cover"
-                        onError={(e) => {
-                          e.target.src = '/api/placeholder/150/225';
-                        }}
-                      />
-                      <div className="p-3">
-                        <h4 className={`font-medium text-sm line-clamp-2 ${
-                          darkTheme ? 'text-white' : 'text-gray-900'
-                        }`}>
-                          {item.title}
-                        </h4>
-                        <p className={`text-xs mt-1 ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                          {item.year} • {item.country}
-                        </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {content.cast.slice(0, 6).map((actor) => (
+                    <div key={actor.id} className={`flex items-center gap-3 p-3 rounded-lg ${
+                      darkTheme ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'
+                    }`}>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        darkTheme ? 'bg-gray-700 border border-gray-600' : 'bg-gray-200 border border-gray-300'
+                      }`}>
+                        <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className={`font-medium ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
+                          {actor.name}
+                        </div>
+                        <div className={`text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {actor.character}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </section>
+              </div>
+            )}
+
+            {/* Streaming Platforms */}
+            {content.streaming_platforms.length > 0 && (
+              <div>
+                <h3 className={`text-lg font-semibold mb-3 ${
+                  darkTheme ? 'text-white' : 'text-gray-900'
+                }`}>
+                  Watch On
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {content.streaming_platforms.map((platform) => (
+                    <span
+                      key={platform}
+                      className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-medium hover:from-red-700 hover:to-red-800 transition-all duration-200"
+                    >
+                      {platform}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-        )}
-
-        {activeTab === 'cast' && (
-          <div className="text-center py-16">
-            <h3 className={`text-2xl font-bold mb-4 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-              Cast & Crew
-            </h3>
-            <p className={`text-lg ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-              Cast and crew information will be available soon.
-            </p>
-          </div>
-        )}
-
-        {activeTab === 'reviews' && (
-          <div>
-            <ReviewSystem 
-              content={content}
-              darkTheme={darkTheme}
-              currentUser={currentUser}
-            />
-          </div>
-        )}
-
-        {activeTab === 'photos' && (
-          <div className="text-center py-16">
-            <h3 className={`text-2xl font-bold mb-4 ${darkTheme ? 'text-white' : 'text-gray-900'}`}>
-              Photos
-            </h3>
-            <p className={`text-lg ${darkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-              Photo gallery will be available soon.
-            </p>
-          </div>
-        )}
+        </div>
       </div>
-
-      <Footer darkTheme={darkTheme} />
     </div>
   );
 };
