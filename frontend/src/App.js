@@ -529,6 +529,11 @@ function App() {
   const [showUserAuth, setShowUserAuth] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
 
+  // Helper function to format title for URL (can be used across the app)
+  const formatTitleForUrl = (title) => {
+    return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+  };
+
   useEffect(() => {
     document.title = 'GDVG - Global Drama Verse Guide';
     
