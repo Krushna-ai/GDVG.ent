@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import axios from 'axios';
 import AdminLogin from './AdminLogin';
 import AdminDashboard from './AdminDashboard';
 import UserAuth from './UserAuth';
 import UserDashboard from './UserDashboard';
+import ContentDetail from './ContentDetail';
 import Footer from './Footer';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
