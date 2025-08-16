@@ -22,12 +22,18 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
+  const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState('home'); // 'home', 'profile', 'stats', 'watchlist', 'analytics', 'social', 'recommendations', 'premium'
   const [homeView, setHomeView] = useState('featured'); // 'featured', 'search'
   const [selectedContent, setSelectedContent] = useState(null);
   const { shouldShowAds } = useAdManagement();
+
+  // Helper function to format title for URL
+  const formatTitleForUrl = (title) => {
+    return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+  };
 
   useEffect(() => {
     fetchUserProfile();
