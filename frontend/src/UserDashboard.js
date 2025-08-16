@@ -528,7 +528,7 @@ const UserDashboard = ({ darkTheme, onLogout, currentUser }) => {
             {homeView === 'featured' ? (
               <FeaturedSections 
                 darkTheme={darkTheme}
-                onContentClick={handleContentClick}
+                handleContentClick={handleContentClick}
                 showAds={shouldShowAds}
               />
             ) : (
